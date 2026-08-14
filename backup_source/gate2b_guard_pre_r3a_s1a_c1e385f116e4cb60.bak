@@ -34,48 +34,26 @@ function materializeFixtures(label: string, fixtures: FixtureRecord[]) {
 
 function pollServerReadiness(url: string, timeoutMs: number, childProc: any): Promise<void> {
   return new Promise((resolve, reject) => {
-    const deadline = Date.now() + timeoutMs;
+    const startTime = Date.now();
     const interval = 250;
-    const requestTimeoutMs = 1000;
-    let settled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const finish = (error?: Error) => {
-      if (settled) return;
-      settled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      if (error) reject(error);
-      else resolve();
-    };
 
     const check = () => {
-      if (settled) return;
       if (childProc && (childProc.exitCode !== null || childProc.signalCode !== null)) {
-        return finish(new Error('Child process exited early'));
+        return reject(new Error('Child process exited early'));
       }
-
-      const remainingMs = deadline - Date.now();
-      if (remainingMs <= 0) {
-        return finish(new Error('HTTP polling timed out'));
+      if (Date.now() - startTime > timeoutMs) {
+        return reject(new Error('HTTP polling timed out'));
       }
 
       const req = http.get(url, (res) => {
         res.resume();
-        finish();
+        resolve();
       });
 
-      req.setTimeout(Math.min(requestTimeoutMs, remainingMs), () => {
-        req.destroy(new Error('HTTP readiness request timed out'));
+      req.on('error', () => {
+        setTimeout(check, interval);
       });
-
-      req.once('error', () => {
-        if (settled) return;
-        const retryRemainingMs = deadline - Date.now();
-        if (retryRemainingMs <= 0) {
-          return finish(new Error('HTTP polling timed out'));
-        }
-        retryTimer = setTimeout(check, Math.min(interval, retryRemainingMs));
-      });
+      req.end();
     };
 
     check();
@@ -93,17 +71,7 @@ function stopOwnedServer(child: any): Promise<boolean> {
       resolve(true);
     };
     child.once('exit', onExit);
-    let killAccepted = false;
-    try {
-      killAccepted = child.kill();
-    } catch {
-      child.removeListener('exit', onExit);
-      return resolve(false);
-    }
-    if (!killAccepted) {
-      child.removeListener('exit', onExit);
-      return resolve(false);
-    }
+    child.kill();
     if (child.exitCode !== null || child.signalCode !== null) {
       child.removeListener('exit', onExit);
       clearTimeout(timer);

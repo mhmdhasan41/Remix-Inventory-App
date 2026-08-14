@@ -1,0 +1,73 @@
+                        value={field.value || ''}
+                        onInputChange={(_, newInputValue) => {
+                          field.onChange(newInputValue);
+                        }}
+                        onChange={(_, newValue) => {
+                          field.onChange(newValue || '');
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="الجهة الموردة أو المستلمة الشريكة"
+                            placeholder="اختر من القائمة أو اكتب اسماً مخصصاً..."
+                            error={!!errors.supplierOrReceiver}
+                            helperText={errors.supplierOrReceiver ? errors.supplierOrReceiver.message : 'اختر جهة شريكة مسجلة أو اكتب اسماً مخصصاً'}
+                          />
+                        )}
+                        sx={{
+                          '& .MuiAutocomplete-input': {
+                            fontFamily: '"Cairo", sans-serif'
+                          }
+                        }}
+                      />
+                    );
+                  }}
+                />
+              </Box>
+
+              {/* Simulation metrics panel */}
+              {liveStockSim && (
+                <Box className="col-span-1 md:col-span-12">
+                  <Card variant="outlined" sx={{ bgcolor: liveStockSim.isNegative ? '#fef2f2' : '#e0f2fe', borderColor: liveStockSim.isNegative ? '#fee2e2' : '#bae6fd', borderRadius: '12px' }}>
+                    <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, '&:last-child': { pb: 2 } }}>
+                      <InfoIcon color={liveStockSim.isNegative ? 'error' : 'info'} />
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: liveStockSim.isNegative ? '#991b1b' : '#0369a1' }}>
+                          محاكاة محاسبة رصيد الصنف لحظياً:
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: liveStockSim.isNegative ? '#b91c1c' : '#0284c7', display: 'block', mt: 0.5 }}>
+                          الرصيد المتوفر حالياً في مستودع <strong>({liveStockSim.storehouseName})</strong>: <strong>{liveStockSim.current} {liveStockSim.unit}</strong> | 
+                          الرصيد المتوقع للمستودع بعد تنفيذ الحركة: <strong style={{ fontSize: '1.05rem' }}>{liveStockSim.simulated} {liveStockSim.unit}</strong>
+                          {liveStockSim.globalStock !== null && (
+                            <><br/>الرصيد الكلي المتوفر حالياً لجميع المستودعات: <strong>{liveStockSim.globalStock} {liveStockSim.unit}</strong> | 
+                            الرصيد الكلي المتوقع بعد تنفيذ الحركة: <strong style={{ fontSize: '1.05rem' }}>{liveStockSim.simulatedGlobalAfter} {liveStockSim.unit}</strong></>
+                          )}
+                        </Typography>
+                        {liveStockSim.isNegative && (
+                          <Typography variant="body2" sx={{ color: '#ef4444', fontWeight: 'bold', mt: 1 }}>
+                            ⚠️ خطأ رياضي: لا تملك رصيداً كافياً بالمستودع لصرف الكمية المدخلة! يرجى تخفيض الكمية أو توريد كميات كافية أولاً.
+                          </Typography>
+                        )}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Box>
+              )}
+
+              {/* Image attachment uploader field */}
+              <Box className="col-span-1 md:col-span-12">
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1.5, color: '#475569', fontFamily: '"Cairo", sans-serif' }}>
+                  إرفاق كرت الاستلام أو التسليم / مستند الحركة (صورة)
+                </Typography>
+                {!selectedImage ? (
+                  <Box
+                    sx={{
+                      border: '2px dashed #cbd5e1',
+                      borderRadius: '12px',
+                      p: 3,
+                      textAlign: 'center',
+                      bgcolor: '#f8fafc',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        borderColor: '#0284c7',

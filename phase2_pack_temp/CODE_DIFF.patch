@@ -1,0 +1,221 @@
+--- a/src/utils/printHtml.ts
++++ b/src/utils/printHtml.ts
+@@ -896,18 +896,22 @@
+     let isNewTablePart = true;
+     let currentTableEl: HTMLTableElement | null = null;
+     let currentTbodyEl: HTMLTableSectionElement | null = null;
++    let currentTableContainer: HTMLDivElement | null = null;
++    let currentSectionTitleEl: HTMLDivElement | null = null;
+     
+     const startTableOnCurrentPage = () => {
+       // Add table title if it's the first part of this table
++      currentSectionTitleEl = null;
+       if (isNewTablePart && tableData.title) {
+         const titleEl = idoc.createElement('div');
+         titleEl.className = 'section-title';
+         titleEl.textContent = tableData.title;
+         pageDiv.appendChild(titleEl);
++        currentSectionTitleEl = titleEl;
+       }
+       
+-      const tableContainer = idoc.createElement('div');
+-      tableContainer.className = 'table-container';
++      currentTableContainer = idoc.createElement('div');
++      currentTableContainer.className = 'table-container';
+       
+       currentTableEl = idoc.createElement('table');
+       const thead = idoc.createElement('thead');
+@@ -927,8 +931,8 @@
+       
+       currentTbodyEl = idoc.createElement('tbody');
+       currentTableEl.appendChild(currentTbodyEl);
+-      tableContainer.appendChild(currentTableEl);
+-      pageDiv.appendChild(tableContainer);
++      currentTableContainer.appendChild(currentTableEl);
++      pageDiv.appendChild(currentTableContainer);
+       isNewTablePart = false;
+     };
+     
+@@ -956,46 +960,83 @@
+       currentTbodyEl!.appendChild(tr);
+       totalRenderedRows++;
+       
+-      const usedHeight = getUsedHeight(pageDiv);
++      let usedHeight = getUsedHeight(pageDiv);
+       
+       if (usedHeight > USABLE_HEIGHT) {
+-        // Row exceeds the page height
++        // Row exceeds current page usable height
+         currentTbodyEl!.removeChild(tr);
+         totalRenderedRows--;
+         
+-        // If this is the only row on the page, and it still exceeds, we must force it to avoid infinite loop
+         if (currentTbodyEl!.children.length === 0) {
+-           // Wait, is it the only row in the table, or the only content on the page?
+-           // If page has no rows, force it
+-           currentTbodyEl!.appendChild(tr);
+-           totalRenderedRows++;
+-           pageDiv = createNewPage();
+-           isNewTablePart = true;
+-           startTableOnCurrentPage();
++          // First-row overflow on current page!
++          // Clean up empty table container and title from current pageDiv
++          if (currentTableContainer && currentTableContainer.parentNode === pageDiv) {
++            pageDiv.removeChild(currentTableContainer);
++          }
++          if (currentSectionTitleEl && currentSectionTitleEl.parentNode === pageDiv) {
++            pageDiv.removeChild(currentSectionTitleEl);
++          }
++          
++          // Create new page for this table part
++          pageDiv = createNewPage();
++          isNewTablePart = true; // Title should appear on new page
++          startTableOnCurrentPage();
++          
++          currentTbodyEl!.appendChild(tr);
++          totalRenderedRows++;
++          
++          usedHeight = getUsedHeight(pageDiv);
++          if (usedHeight > USABLE_HEIGHT) {
++            // Row STILL overflows on a fresh page with 0 previous rows!
++            // This single row is inherently taller than a full printable A4 page.
++            currentTbodyEl!.removeChild(tr);
++            totalRenderedRows--;
++            if (currentTableContainer && currentTableContainer.parentNode === pageDiv) {
++              pageDiv.removeChild(currentTableContainer);
++            }
++            if (currentSectionTitleEl && currentSectionTitleEl.parentNode === pageDiv) {
++              pageDiv.removeChild(currentSectionTitleEl);
++            }
++            
++            const errorMsg = `خطأ في إنشاء المستند: السجل رقم ${rIdx + 1} في الجدول "${tableData.title || tIdx + 1}" يحتوي على محتوى يتجاوز ارتفاع صفحة كاملة (${Math.round(usedHeight)}px > ${USABLE_HEIGHT}px). تم إيقاف التصدير لتجنب مستند ناقص.`;
++            if (typeof window !== 'undefined') {
++              alert(errorMsg);
++            }
++            throw new Error(errorMsg);
++          }
+         } else {
+-           // Move to next page
+-           pageDiv = createNewPage();
+-           isNewTablePart = true; // wait, do we repeat the title? Yes, or maybe not. 
+-           // The user said: repeat table headers, don't repeat title if it's the same table unless we want to. Let's not repeat title.
+-           isNewTablePart = false;
+-           startTableOnCurrentPage();
+-           
+-           currentTbodyEl!.appendChild(tr);
+-           totalRenderedRows++;
+-           
+-           // Double check if this single row is too big for the new page
+-           const newUsedHeight = getUsedHeight(pageDiv);
+-           if (newUsedHeight > USABLE_HEIGHT) {
+-             // It's still too big. Force it and start a new page.
+-             pageDiv = createNewPage();
+-             startTableOnCurrentPage();
+-           }
++          // Move to next page for this row
++          pageDiv = createNewPage();
++          isNewTablePart = false; // Continuing table part: keep table header, do not repeat section title
++          startTableOnCurrentPage();
++          
++          currentTbodyEl!.appendChild(tr);
++          totalRenderedRows++;
++          
++          usedHeight = getUsedHeight(pageDiv);
++          if (usedHeight > USABLE_HEIGHT) {
++            // Single row on fresh page still exceeds USABLE_HEIGHT
++            currentTbodyEl!.removeChild(tr);
++            totalRenderedRows--;
++            if (currentTableContainer && currentTableContainer.parentNode === pageDiv) {
++              pageDiv.removeChild(currentTableContainer);
++            }
++            if (currentSectionTitleEl && currentSectionTitleEl.parentNode === pageDiv) {
++              pageDiv.removeChild(currentSectionTitleEl);
++            }
++            
++            const errorMsg = `خطأ في إنشاء المستند: السجل رقم ${rIdx + 1} في الجدول "${tableData.title || tIdx + 1}" يحتوي على محتوى يتجاوز ارتفاع صفحة كاملة (${Math.round(usedHeight)}px > ${USABLE_HEIGHT}px). تم إيقاف التصدير لتجنب مستند ناقص.`;
++            if (typeof window !== 'undefined') {
++              alert(errorMsg);
++            }
++            throw new Error(errorMsg);
++          }
+         }
+       }
+     }
+   }
+ 
+-  // 6. Append Notes and Signatures individually to maximize space usage
++  // 6. Append Notes, Signatures, Barcode individually with page overflow checks
+   if (data.notes) {
+     const notesDiv = idoc.createElement('div');
+     notesDiv.className = 'notes-container';
+@@ -1059,20 +1100,66 @@
+     }
+   }
+ 
+-  // Update page numbers
++  // 7. Cleanup Empty Containers and Orphaned Section Titles across all pages
++  const pageNodes = Array.from(pagesContainer.children) as HTMLElement[];
++  pageNodes.forEach((p, pIdx) => {
++    // Remove empty table containers
++    const tableContainers = Array.from(p.querySelectorAll('.table-container')) as HTMLElement[];
++    tableContainers.forEach(tc => {
++      const tbody = tc.querySelector('tbody');
++      if (!tbody || tbody.children.length === 0) {
++        tc.remove();
++      }
++    });
++
++    // Remove orphaned section titles
++    const titles = Array.from(p.querySelectorAll('.section-title')) as HTMLElement[];
++    titles.forEach(t => {
++      const next = t.nextElementSibling;
++      if (!next || (!next.classList.contains('table-container') && !next.classList.contains('notes-container'))) {
++        t.remove();
++      }
++    });
++
++    // Remove empty pages with no data content if page count > 1
++    if (pIdx > 0) {
++      const hasContent = p.querySelector('.meta-card-container, .table-container, .notes-container, .signatures-grid, .barcode-container');
++      if (!hasContent) {
++        p.remove();
++      }
++    }
++  });
++
++  // Re-query remaining valid pages
+   const allPages = Array.from(pagesContainer.children) as HTMLElement[];
+   allPages.forEach((p, idx) => {
+     const pageNumPlaceholder = p.querySelector('.page-num-placeholder');
+     if (pageNumPlaceholder) {
+       pageNumPlaceholder.textContent = `صفحة ${idx + 1} من ${allPages.length}`;
+     }
+-    p.style.position = 'relative'; // restore from absolute
++    p.style.position = 'relative'; // restore layout positioning
+     p.style.visibility = 'visible';
+   });
+ 
+-  // Validation
++  // 8. Strict Audit Validations
+   if (totalOriginalRows !== totalRenderedRows) {
+-    console.error(`Row count mismatch! Original: ${totalOriginalRows}, Rendered: ${totalRenderedRows}`);
++    const errorMsg = `خطأ في التحقق من صحة عدد السجلات: المتوقع ${totalOriginalRows} سجلاً، بينما تم رسم ${totalRenderedRows} سجلاً. تم إيقاف إنشاء PDF لتجنب بيانات مفقودة.`;
++    if (typeof window !== 'undefined') {
++      alert(errorMsg);
++    }
++    throw new Error(errorMsg);
++  }
++
++  for (let i = 0; i < allPages.length; i++) {
++    const p = allPages[i];
++    const pageUsedHeight = getUsedHeight(p);
++    if (pageUsedHeight > USABLE_HEIGHT + 2) {
++      const errorMsg = `خطأ في أبعاد الصفحة رقم ${i + 1}: الارتفاع المستخدم (${Math.round(pageUsedHeight)}px) يتجاوز الحد القابل للطباعة (${USABLE_HEIGHT}px). تم إيقاف التصدير.`;
++      if (typeof window !== 'undefined') {
++        alert(errorMsg);
++      }
++      throw new Error(errorMsg);
++    }
+   }
+ 
+   // 7. Render to PDF

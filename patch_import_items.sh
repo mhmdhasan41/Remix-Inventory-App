@@ -1,0 +1,81 @@
+#!/bin/bash
+cat src/pages/Settings.tsx | awk '
+/const handleImportTransactionsCSV = \(event/ {
+    print "  const handleImportItemsCSV = (event: React.ChangeEvent<HTMLInputElement>) => {";
+    print "    const file = event.target.files?.[0];";
+    print "    if (!file) return;";
+    print "    setIsImporting(true);";
+    print "    const reader = new FileReader();";
+    print "    reader.onload = async (e) => {";
+    print "      try {";
+    print "        const data = e.target?.result as ArrayBuffer;";
+    print "        const workbook = XLSX.read(data, { type: '\''array'\'' });";
+    print "        const firstSheetName = workbook.SheetNames[0];";
+    print "        const worksheet = workbook.Sheets[firstSheetName];";
+    print "        const rows = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, defval: \"\" });";
+    print "        if (rows.length < 2) {";
+    print "          setErrorMsg('\''الملف فارغ أو لا يحتوي على صفوف بيانات.'\''); setSuccessMsg(null); setIsImporting(false); return;";
+    print "        }";
+    print "        let importedCount = 0; let skippedCount = 0; const errorLines: string[] = [];";
+    print "        const currentSettings = dataService.getSettings();";
+    print "        let settingsChanged = false;";
+    print "        const existingCategories = new Set(currentSettings.categories.map((c: any) => c.name));";
+    print "        const existingStorehouses = new Set(currentSettings.storehouses);";
+    print "        const existingUnits = new Set(currentSettings.units);";
+    print "        for (let i = 1; i < rows.length; i++) {";
+    print "          const row = rows[i];";
+    print "          if (row.length < 2 || !row[0] || !row[1]) { skippedCount++; continue; }";
+    print "          const code = String(row[0]).trim();";
+    print "          const name = String(row[1]).trim();";
+    print "          const category = String(row[2] || '\''غير مصنف'\'').trim();";
+    print "          const unit = String(row[3] || '\''وحدة'\'').trim();";
+    print "          const safeStockStr = String(row[4] || '\''0'\'');";
+    print "          const safeStockLimit = parseFloat(safeStockStr) || 0;";
+    print "          const currentStockStr = String(row[5] || '\''0'\'');";
+    print "          const currentStock = parseFloat(currentStockStr) || 0;";
+    print "          const storageLocation = String(row[6] || '\''المخزن الرئيسي'\'').trim();";
+    print "          const note = String(row[7] || \"\").trim();";
+    print "          const manufacturer = String(row[8] || \"\").trim();";
+    print "          const mfgDate = String(row[9] || \"\").trim();";
+    print "          const expDate = String(row[10] || \"\").trim();";
+    print "          const hazardLevel = String(row[11] || \"\").trim();";
+    print "          const isPesticide = code.toUpperCase().startsWith('\''PES'\'') || name.includes('\''مبيد'\'');";
+    print "          const itemType = isPesticide ? '\''pesticide'\'' : '\''material'\'';";
+    print "          if (!existingCategories.has(category)) { existingCategories.add(category); currentSettings.categories.push({ name: category, prefix: \"GEN\", startRange: 1000, endRange: 1999 }); settingsChanged = true; }";
+    print "          if (!existingStorehouses.has(storageLocation)) { existingStorehouses.add(storageLocation); currentSettings.storehouses.push(storageLocation); settingsChanged = true; }";
+    print "          if (!existingUnits.has(unit)) { existingUnits.add(unit); currentSettings.units.push(unit); settingsChanged = true; }";
+    print "          const itemData: any = {";
+    print "            id: '\''mat-'\'' + Math.random().toString(36).substr(2, 9),";
+    print "            code, name, type: itemType, category, unit, safeStockLimit, currentStock, storageLocation, note,";
+    print "            createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()";
+    print "          };";
+    print "          if (isPesticide) {";
+    print "            itemData.manufacturer = manufacturer; itemData.manufacturingDate = mfgDate; itemData.expirationDate = expDate; itemData.hazardLevel = hazardLevel as any;";
+    print "          }";
+    print "          const res = await dataService.saveMaterial(itemData);";
+    print "          if (res.success) {";
+    print "            importedCount++;";
+    print "            if (currentStock > 0) {";
+    print "              const txData = { id: '\''tx-'\'' + Math.random().toString(36).substr(2, 9), date: new Date().toISOString().split('\''T'\'')[0], itemType: itemType, itemId: itemData.id, itemCode: itemData.code, itemName: itemData.name, itemCategory: itemData.category, storehouse: storageLocation, transactionType: '\''افتتاحي'\'' as any, quantity: currentStock, unit: itemData.unit, stockBefore: 0, stockAfter: currentStock, executedBy: dataService.getCurrentUser().fullName, supplierOrReceiver: '\''رصيد مخزني أولي (رصيد افتتاحي)'\'', notes: '\''تم استيراده من قالب الإكسل'\'', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };";
+    print "              await dataService.saveTransaction(txData as any);";
+    print "            }";
+    print "          } else {";
+    print "            skippedCount++; errorLines.push(`السطر ${i + 1}: ${res.message}`);";
+    print "          }";
+    print "        }";
+    print "        if (settingsChanged) await dataService.saveSettings(currentSettings);";
+    print "        let completionMsg = `تحليل واستيراد الأصناف الجماعية تم بنجاح! تم رصد (${importedCount}) أصناف جديدة وتخطي (${skippedCount}) سطور.\\n`;";
+    print "        if (errorLines.length > 0) completionMsg += `أخطاء: ` + errorLines.slice(0, 3).join('\'' | '\'');";
+    print "        setSuccessMsg(completionMsg); setErrorMsg(errorLines.length > 0 ? '\''تم تخطي بعض الأسطر، يرجى مراجعتها.'\'' : null);";
+    print "        setTimeout(() => { setIsImporting(false); window.location.reload(); }, 1500);";
+    print "      } catch (err: any) { setIsImporting(false); setErrorMsg(`فشل استيراد الأصناف: ${err.message}`); setSuccessMsg(null); }";
+    print "    };";
+    print "    reader.readAsArrayBuffer(file);";
+    print "  };";
+    print "";
+    print $0;
+    next;
+}
+{ print; }
+' > src/pages/Settings.tsx.new4
+mv src/pages/Settings.tsx.new4 src/pages/Settings.tsx

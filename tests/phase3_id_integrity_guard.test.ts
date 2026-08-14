@@ -1,0 +1,494 @@
+
+import puppeteer from 'puppeteer';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+import { spawn } from 'child_process';
+import http from 'http';
+
+const EXPECTED_ENGINE_SOURCE_HASH = '7511d99b0d7ccb491b80d64d648ad7a9ab5fa9b8215ef2d4997cd0cf5aca67c3';
+const ENGINE_SOURCE_PATH = path.resolve('src/utils/printHtml.ts');
+
+function getFileHash(filePath: string): string {
+  const buffer = fs.readFileSync(filePath);
+  return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+type FixtureRecord = { recordId: string; row: string[] };
+
+function materializeFixtures(label: string, fixtures: FixtureRecord[]) {
+  const rows: string[][] = [];
+  const recordIds: string[] = [];
+  const seen = new Set<string>();
+
+  for (const f of fixtures) {
+    if (typeof f.recordId !== 'string') throw new Error(`[${label}] recordId must be string`);
+    if (!f.recordId.trim()) throw new Error(`[${label}] recordId cannot be blank`);
+    if (seen.has(f.recordId)) throw new Error(`[${label}] duplicate recordId`);
+    seen.add(f.recordId);
+    rows.push(f.row);
+    recordIds.push(f.recordId);
+  }
+  return { rows, recordIds };
+}
+
+function pollServerReadiness(url: string, timeoutMs: number, childProc: any): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const startTime = Date.now();
+    const interval = 250;
+
+    const check = () => {
+      if (childProc && (childProc.exitCode !== null || childProc.signalCode !== null)) {
+        return reject(new Error('Child process exited early'));
+      }
+      if (Date.now() - startTime > timeoutMs) {
+        return reject(new Error('HTTP polling timed out'));
+      }
+
+      const req = http.get(url, (res) => {
+        res.resume();
+        resolve();
+      });
+
+      req.on('error', () => {
+        setTimeout(check, interval);
+      });
+      req.end();
+    };
+
+    check();
+  });
+}
+
+function stopOwnedServer(child: any): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (!child || child.exitCode !== null || child.signalCode !== null) {
+      return resolve(true);
+    }
+    let timer: any;
+    const onExit = () => {
+      clearTimeout(timer);
+      resolve(true);
+    };
+    child.once('exit', onExit);
+    child.kill();
+    if (child.exitCode !== null || child.signalCode !== null) {
+      child.removeListener('exit', onExit);
+      clearTimeout(timer);
+      return resolve(true);
+    }
+    timer = setTimeout(() => {
+      child.removeListener('exit', onExit);
+      resolve(false);
+    }, 5000);
+  });
+}
+
+async function runGuardTests() {
+  let browser: any;
+  let serverProcess: any;
+  let allTestsPassed = true;
+  let serverStopped = false;
+  let browserClosed = false;
+  let hooksRestoredCheck = false;
+
+  try {
+    const engineSourceHash = getFileHash(ENGINE_SOURCE_PATH);
+    console.log(`Engine Source File: ${ENGINE_SOURCE_PATH}`);
+    console.log(`Engine SHA-256 Hash: ${engineSourceHash}`);
+
+    if (engineSourceHash !== EXPECTED_ENGINE_SOURCE_HASH) {
+      throw new Error(`Engine Source Hash mismatch! Expected ${EXPECTED_ENGINE_SOURCE_HASH} but got ${engineSourceHash}`);
+    }
+
+    // Start Vite server
+    serverProcess = spawn(process.execPath, [
+      path.resolve('node_modules/vite/bin/vite.js'),
+      '--port', '4179', '--strictPort', '--host', '127.0.0.1'
+    ], { cwd: process.cwd(), stdio: 'pipe' });
+
+    serverProcess.stdout.on('data', () => {}); // Consume stdout
+    serverProcess.stderr.on('data', (data: any) => {
+      console.error(`Vite stderr: ${data}`);
+    });
+
+    await pollServerReadiness('http://127.0.0.1:4179', 15000, serverProcess);
+
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    page.setDefaultNavigationTimeout(15000);
+    page.setDefaultTimeout(15000);
+    await page.goto('http://127.0.0.1:4179', {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000
+    });
+
+    const runTestCase = async (_tName: string, config: any) => {
+      return await page.evaluate(async (_tName, cfg: any) => {
+        let error = null;
+        let pdfBlobCaptured = false;
+        let pdfHeaderValid = false;
+        let iframeHookInstalled = false;
+        let p3Injected = false;
+        let domEvidenceCaptured = false;
+        let identityMapCaptured = false;
+
+        let originalCreateObjectURL: any = null;
+        let originalAppendChild: any = null;
+        let iframeOriginalQuerySelector: any = null;
+        let originalWeakMapSet: any = null;
+        let capturedContentWindow: any = null;
+
+        let createObjectURLRestored = false;
+        let appendChildRestored = false;
+        let iframeQuerySelectorRestored = false;
+        let weakMapRestored = false;
+        let hooksRestored = false;
+
+        let capturedPdfPromise: Promise<string> | null = null;
+        let capturedIdentityMap: WeakMap<any, any> | null = null;
+
+        try {
+          originalCreateObjectURL = URL.createObjectURL;
+          URL.createObjectURL = function(blob: any) {
+            const url = originalCreateObjectURL.call(this, blob);
+            if (blob && blob.type === 'application/pdf') {
+              pdfBlobCaptured = true;
+              capturedPdfPromise = blob.arrayBuffer().then((buf: ArrayBuffer) => {
+                const bytes = new Uint8Array(buf);
+                if (bytes.length > 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+                  pdfHeaderValid = true;
+                }
+                return "captured";
+              });
+            }
+            return url;
+          };
+
+          originalAppendChild = Node.prototype.appendChild;
+          Node.prototype.appendChild = function(node: any) {
+            const result = originalAppendChild.call(this, node);
+            if (node && node.tagName === 'IFRAME' && !iframeHookInstalled) {
+              const iframe = node;
+              const contentWindow = iframe.contentWindow;
+              if (!contentWindow) return result;
+              capturedContentWindow = contentWindow;
+
+              originalWeakMapSet = contentWindow.WeakMap.prototype.set;
+              contentWindow.WeakMap.prototype.set = function(key: any, val: any) {
+                if (key && key.tagName === 'TR' && val && typeof val === 'object' && 'recordId' in val && 'tableIndex' in val) {
+                   capturedIdentityMap = this;
+                   identityMapCaptured = true;
+                }
+                return originalWeakMapSet.call(this, key, val);
+              };
+
+              iframeOriginalQuerySelector = contentWindow.Element.prototype.querySelector;
+              contentWindow.Element.prototype.querySelector = function(sel: any) {
+                if (sel === '.page-num-placeholder' && !p3Injected && cfg.case) {
+                  p3Injected = true;
+                  const doc = contentWindow.document;
+
+                  if (!capturedIdentityMap) {
+                     throw new Error('Identity WeakMap not captured');
+                  }
+
+                  if (cfg.case === 'A') {
+                     const trs = Array.from(doc.querySelectorAll('.table-container tbody > tr'));
+                     if (trs.length >= 1) {
+                        capturedIdentityMap.delete(trs[0]);
+                     } else {
+                        throw new Error('Required rows not found for case A');
+                     }
+                  } else if (cfg.case === 'B') {
+                     const trs = Array.from(doc.querySelectorAll('.table-container tbody > tr'));
+                     if (trs.length >= 2) {
+                        const m0 = capturedIdentityMap.get(trs[0]);
+                        const m1 = capturedIdentityMap.get(trs[1]);
+                        if (m0 && m1) {
+                           capturedIdentityMap.set(trs[0], m1);
+                           capturedIdentityMap.set(trs[1], m0);
+                        }
+                     } else {
+                        throw new Error('Required rows not found for case B');
+                     }
+                  } else if (cfg.case === 'C') {
+                     const trs = Array.from(doc.querySelectorAll('.table-container tbody > tr'));
+                     if (trs.length >= 2) {
+                        const m0 = capturedIdentityMap.get(trs[0]);
+                        if (m0) {
+                           capturedIdentityMap.set(trs[1], m0);
+                        }
+                     } else {
+                        throw new Error('Required rows not found for case C');
+                     }
+                  } else if (cfg.case === 'D') {
+                     const tbodies = Array.from(doc.querySelectorAll('.table-container tbody'));
+                     if (tbodies.length >= 2) {
+                        const trs = Array.from((tbodies[1] as HTMLElement).querySelectorAll('tr'));
+                        if (trs.length >= 2) {
+                           const tr0 = trs[0] as HTMLElement;
+                           const tr1 = trs[1] as HTMLElement;
+                           const clone = tr0.cloneNode(true);
+                           tr1.parentNode!.replaceChild(clone, tr1);
+                        } else {
+                           throw new Error('Required rows not found in tbody 1 for case D');
+                        }
+                     } else {
+                        throw new Error('Required tbodies not found for case D');
+                     }
+                  }
+                  domEvidenceCaptured = true;
+                }
+                return iframeOriginalQuerySelector.call(this, sel);
+              };
+              iframeHookInstalled = true;
+            }
+            return result;
+          };
+
+          const { exportToPDF } = await import('/src/utils/printHtml.ts' as any);
+          await exportToPDF(cfg.printData);
+
+          if (capturedPdfPromise) {
+             await capturedPdfPromise;
+          }
+
+        } catch (e: any) {
+          error = e.message;
+        } finally {
+          if (originalCreateObjectURL) {
+             URL.createObjectURL = originalCreateObjectURL;
+             createObjectURLRestored = (URL.createObjectURL === originalCreateObjectURL);
+          }
+          if (originalAppendChild) {
+             Node.prototype.appendChild = originalAppendChild;
+             appendChildRestored = (Node.prototype.appendChild === originalAppendChild);
+          }
+          if (iframeHookInstalled && capturedContentWindow && iframeOriginalQuerySelector) {
+             try {
+                 capturedContentWindow.Element.prototype.querySelector = iframeOriginalQuerySelector;
+                 iframeQuerySelectorRestored = (capturedContentWindow.Element.prototype.querySelector === iframeOriginalQuerySelector);
+             } catch(e) {
+                 iframeQuerySelectorRestored = false;
+             }
+          }
+          if (iframeHookInstalled && capturedContentWindow && originalWeakMapSet) {
+             try {
+                 capturedContentWindow.WeakMap.prototype.set = originalWeakMapSet;
+                 weakMapRestored = (capturedContentWindow.WeakMap.prototype.set === originalWeakMapSet);
+             } catch(e) {
+                 weakMapRestored = false;
+             }
+          } else {
+             weakMapRestored = true;
+          }
+          hooksRestored = createObjectURLRestored && appendChildRestored && iframeQuerySelectorRestored && weakMapRestored;
+        }
+
+        const remainingIframes = document.querySelectorAll('iframe').length;
+
+        return {
+            error, pdfBlobCaptured, pdfHeaderValid, remainingIframes,
+            iframeHookInstalled, p3Injected, domEvidenceCaptured, identityMapCaptured,
+            hooksRestored, createObjectURLRestored, appendChildRestored, iframeQuerySelectorRestored, weakMapRestored
+        };
+      }, _tName, config);
+    };
+
+    const runRequireStringPartTests = async () => {
+      return await page.evaluate(async () => {
+        let results: string[] = [];
+        const { requireStableStringPart } = await import('/src/utils/printHtml.ts' as any);
+        try { requireStableStringPart(undefined, 'ctx'); results.push('FAIL'); } catch (e) { results.push('PASS'); }
+        try { requireStableStringPart(null, 'ctx'); results.push('FAIL'); } catch (e) { results.push('PASS'); }
+        try { requireStableStringPart(123, 'ctx'); results.push('FAIL'); } catch (e) { results.push('PASS'); }
+        try { requireStableStringPart('   ', 'ctx'); results.push('FAIL'); } catch (e) { results.push('PASS'); }
+        try {
+            const v = requireStableStringPart('  text  ', 'ctx');
+            if (v === 'text') results.push('PASS'); else results.push('FAIL');
+        } catch (e) { results.push('FAIL'); }
+        return results;
+      });
+    };
+    console.log('\n--- Running requireStableStringPart Tests ---');
+    const rTests = await runRequireStringPartTests();
+    if (rTests.some((r: string) => r !== 'PASS')) {
+       console.error('requireStableStringPart tests failed:', rTests);
+       allTestsPassed = false;
+    } else {
+       console.log('requireStableStringPart tests passed.');
+    }
+
+    // Positive Control
+    const fixturesPositive: FixtureRecord[] = [
+      { recordId: 'R1', row: ['R1'] },
+      { recordId: 'R2', row: ['R2'] }
+    ];
+    const p1 = materializeFixtures('Positive-T1', fixturesPositive.slice(0, 1));
+    const p2 = materializeFixtures('Positive-T2', fixturesPositive.slice(1, 2));
+
+    const printDataPositive = {
+      filename: 'Positive.pdf', title: 'Positive', organizationName: 'Org', departmentName: 'Dept',
+      metaFields: [{label: 'Test', value: 'Value'}],
+      tables: [
+        { headers: ['H1'], rows: p1.rows, recordIds: p1.recordIds },
+        { headers: ['H2'], rows: p2.rows, recordIds: p2.recordIds }
+      ]
+    };
+    const resPositive = await runTestCase('Positive', { case: null, printData: printDataPositive });
+    if (resPositive.error || !resPositive.pdfBlobCaptured || !resPositive.pdfHeaderValid || resPositive.remainingIframes !== 0 || !resPositive.hooksRestored) {
+       console.error('Positive Control FAILED:', resPositive);
+       allTestsPassed = false;
+    } else {
+       console.log('Positive Control PASSED.');
+    }
+
+    // Corruptions A-D
+    const runCorruptionCase = async (caseName: string, fixtures: FixtureRecord[][], errKeyword: string) => {
+       const printData = {
+          filename: `${caseName}.pdf`, title: caseName, organizationName: 'Org', departmentName: 'Dept',
+          tables: fixtures.map((fx, i) => {
+             const m = materializeFixtures(`${caseName}-T${i}`, fx);
+             return { headers: ['H1'], rows: m.rows, recordIds: m.recordIds };
+          })
+       };
+       const res = await runTestCase(caseName, { case: caseName, printData });
+       const passed = res.error && res.error.includes(errKeyword) &&
+                      !res.pdfBlobCaptured && !res.pdfHeaderValid &&
+                      res.remainingIframes === 0 && res.hooksRestored &&
+                      res.domEvidenceCaptured && res.identityMapCaptured && res.p3Injected;
+       if (!passed) {
+          console.error(`Corruption Case ${caseName} FAILED:`, res);
+          allTestsPassed = false;
+       } else {
+          console.log(`Corruption Case ${caseName} PASSED (Blocked successfully).`);
+       }
+    };
+
+    await runCorruptionCase('A', [
+      [
+        { recordId: 'R1', row: ['P3-A-R1'] },
+        { recordId: 'R2', row: ['P3-A-R2'] },
+        { recordId: 'R3', row: ['P3-A-R3'] }
+      ]
+    ], 'مجهول الهوية');
+
+    await runCorruptionCase('B', [
+      [
+        { recordId: 'R1', row: ['P3-B-R1'] },
+        { recordId: 'R2', row: ['P3-B-R2'] },
+        { recordId: 'R3', row: ['P3-B-R3'] }
+      ]
+    ], 'ترتيب غير متطابق أو استبدال');
+
+    await runCorruptionCase('C', [
+      [
+        { recordId: 'R1', row: ['P3-C-R1'] },
+        { recordId: 'R2', row: ['P3-C-R2'] },
+        { recordId: 'R3', row: ['P3-C-R3'] },
+        { recordId: 'R4', row: ['P3-C-R4'] }
+      ]
+    ], 'تكرار السجل المرسوم');
+
+    await runCorruptionCase('D', [
+      [
+        { recordId: 'T0-R1', row: ['P3-D-T0-R1'] },
+        { recordId: 'T0-R2', row: ['P3-D-T0-R2'] }
+      ],
+      [
+        { recordId: 'T1-R1', row: ['P3-D-T1-R1'] },
+        { recordId: 'T1-R2', row: ['P3-D-T1-R2'] }
+      ]
+    ], 'مجهول الهوية');
+
+    // Preflight negatives (intentionally malformed, bypassing materializeFixtures)
+    const runPreflightCase = async (name: string, pData: any, errKeyword: string) => {
+       const res = await runTestCase(name, { case: null, printData: pData });
+       const iframeNeverAppended = !res.iframeHookInstalled;
+       const passed = res.error && res.error.includes(errKeyword) && iframeNeverAppended && !res.pdfBlobCaptured;
+       if (!passed) {
+          console.error(`Preflight Case ${name} FAILED:`, res);
+          allTestsPassed = false;
+       } else {
+          console.log(`Preflight Case ${name} PASSED (Blocked successfully).`);
+       }
+    };
+
+    await runPreflightCase('missing recordIds', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']] }]
+    }, 'يفتقد recordIds');
+
+    await runPreflightCase('not array', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: 'R1' }]
+    }, 'يفتقد recordIds');
+
+    await runPreflightCase('length mismatch', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: ['R1', 'R2'] }]
+    }, 'لا يطابق rows');
+
+    await runPreflightCase('non-string undefined', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: [undefined] }]
+    }, 'الهوية ليست نصاً');
+
+    await runPreflightCase('non-string null', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: [null] }]
+    }, 'الهوية ليست نصاً');
+
+    await runPreflightCase('non-string number', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: [123] }]
+    }, 'الهوية ليست نصاً');
+
+    await runPreflightCase('blank/whitespace', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: ['   '] }]
+    }, 'الهوية نص فارغ');
+
+    await runPreflightCase('duplicate after trim', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1'], ['R2']], recordIds: [' R1 ', 'R1'] }]
+    }, 'تكرار في الهوية');
+
+    hooksRestoredCheck = true;
+  } catch (e) {
+    console.error("Test framework error:", e);
+    allTestsPassed = false;
+  } finally {
+    if (browser) {
+      await browser.close();
+      browserClosed = true;
+    }
+    if (serverProcess) {
+      serverStopped = await stopOwnedServer(serverProcess);
+    } else {
+      serverStopped = true; // Never started
+    }
+
+    if (!serverStopped) {
+      allTestsPassed = false;
+      console.error('Failed to close server process');
+    }
+
+    if (allTestsPassed && browserClosed && serverStopped && hooksRestoredCheck) {
+       console.log('\nPHASE3_ID_INTEGRITY_GUARD_PASSED');
+       process.exitCode = 0;
+    } else {
+       console.log('\nPHASE3_ID_INTEGRITY_GUARD_FAILED');
+       process.exitCode = 1;
+    }
+  }
+}
+
+runGuardTests().catch(e => {
+   console.error(e);
+   process.exitCode = 1;
+});

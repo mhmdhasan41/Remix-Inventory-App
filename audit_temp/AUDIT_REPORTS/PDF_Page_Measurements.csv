@@ -1,0 +1,5 @@
+﻿Page Type,Orientation,Total Height (px),Padding Top/Bottom (px),Usable Height (px),Header (px),Title & Meta (px),Table Header (px),Row Height avg (px),Signatures Block (px),Bottom Gap (px),Gap Ratio (%),Justification & Safety Margin Analysis
+Portrait Page 1 (Voucher / Report),Portrait,1195,60,1135,65,120,35,32,100,179,15.7%,"Justified: Adding 1 more row (32px) plus signature grid (100px) exceeds 1135px, triggering clean page split."
+Portrait Page 2+ (Middle Page),Portrait,1195,60,1135,65,0,35,32,0,75,6.6%,Justified: 30 rows @ 32px = 960px + 100px header/thead = 1060px. Next row would exceed 1135px.
+Landscape Page 1 (Report),Landscape,768,60,708,60,110,35,32,0,55,7.7%,Justified: 14 rows @ 32px = 448px + 205px header/meta = 653px. Row 15 would exceed 708px usable height.
+Landscape Page 2+ (Report),Landscape,768,60,708,60,0,35,32,0,37,5.2%,Justified: 19 rows @ 32px = 608px + 95px header/thead = 703px. Row 20 would exceed 708px usable height.

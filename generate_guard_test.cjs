@@ -1,0 +1,323 @@
+const fs = require('fs');
+
+const testContent = `
+import puppeteer from 'puppeteer';
+
+async function runGuardTests() {
+  let browser;
+  let allTestsPassed = true;
+
+  try {
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    
+    // Serve from the Vite dev server running on port 3000
+    await page.goto('http://localhost:3000', { waitUntil: 'networkidle0' });
+
+    // Define a helper to run test cases in browser context
+    const runTestCase = async (testName, config) => {
+      return await page.evaluate(async (testName, cfg) => {
+        let error = null;
+        let pdfBlobCaptured = false;
+        let pdfHeaderValid = false;
+        let iframeHookInstalled = false;
+        let p3Injected = false;
+        let domEvidenceCaptured = false;
+        
+        let originalCreateObjectURL = null;
+        let originalAppendChild = null;
+        let iframeOriginalQuerySelector = null;
+        let capturedContentWindow = null;
+        
+        let createObjectURLRestored = false;
+        let appendChildRestored = false;
+        let iframeQuerySelectorRestored = false;
+        let hooksRestored = false;
+        
+        let finalDomCountsPerTable = [];
+        let finalDomOrdersPerTable = [];
+
+        try {
+          originalCreateObjectURL = URL.createObjectURL;
+          URL.createObjectURL = (blob) => {
+             pdfBlobCaptured = true;
+             if (blob && blob.size > 0 && blob.type === 'application/pdf') {
+                pdfHeaderValid = true;
+             }
+             return originalCreateObjectURL(blob);
+          };
+
+          originalAppendChild = Node.prototype.appendChild;
+          Node.prototype.appendChild = function(node) {
+            const result = originalAppendChild.call(this, node);
+            if (node && node.tagName === 'IFRAME' && !iframeHookInstalled) {
+              const iframe = node;
+              const contentWindow = iframe.contentWindow;
+              if (!contentWindow) return result;
+              capturedContentWindow = contentWindow;
+              
+              iframeOriginalQuerySelector = contentWindow.Element.prototype.querySelector;
+              contentWindow.Element.prototype.querySelector = function(sel) {
+                // Hook to inject DOM corruption once .page-num-placeholder is selected
+                if (sel === '.page-num-placeholder' && !p3Injected && cfg.case) {
+                  p3Injected = true;
+                  const doc = contentWindow.document;
+                  
+                  if (cfg.case === 'A') {
+                     // Reorder R1 and R2
+                     const trs = Array.from(doc.querySelectorAll('tbody > tr'));
+                     if (trs.length >= 2) {
+                        const tr0 = trs[0];
+                        const tr1 = trs[1];
+                        tr1.parentNode.insertBefore(tr1, tr0);
+                     }
+                  } else if (cfg.case === 'B') {
+                     // Substitute R2 with a fake row
+                     const trs = Array.from(doc.querySelectorAll('tbody > tr'));
+                     if (trs.length >= 2) {
+                        const tr1 = trs[1];
+                        const fake = doc.createElement('tr');
+                        fake.innerHTML = '<td>P3-B-X</td>';
+                        tr1.parentNode.replaceChild(fake, tr1);
+                     }
+                  } else if (cfg.case === 'C') {
+                     // Duplicate R2, Loss R3
+                     const trs = Array.from(doc.querySelectorAll('tbody > tr'));
+                     if (trs.length >= 4) {
+                        const tr1 = trs[1];
+                        const tr2 = trs[2];
+                        const clone = tr1.cloneNode(true);
+                        tr1.parentNode.insertBefore(clone, tr2);
+                        tr2.parentNode.removeChild(tr2);
+                     }
+                  } else if (cfg.case === 'D') {
+                     // Substitute T1 R2 with clone of T1 R1
+                     const tbodies = Array.from(doc.querySelectorAll('tbody'));
+                     if (tbodies.length >= 2) {
+                        const trs = Array.from(tbodies[1].querySelectorAll('tr'));
+                        if (trs.length >= 2) {
+                           const tr0 = trs[0];
+                           const tr1 = trs[1];
+                           const clone = tr0.cloneNode(true);
+                           tr1.parentNode.replaceChild(clone, tr1);
+                        }
+                     }
+                  }
+                  
+                  // Capture final state
+                  const currentTbodies = Array.from(doc.querySelectorAll('.table-container > table > tbody'));
+                  finalDomOrdersPerTable = currentTbodies.map(tbody => {
+                     const rows = Array.from(tbody.querySelectorAll('tr'));
+                     return rows.map(r => {
+                        const td = r.querySelector('td');
+                        const match = td ? td.innerHTML.match(/P3-[A-Z0-9-]+/) : null;
+                        return match ? match[0] : (td ? td.innerHTML : 'UNKNOWN');
+                     });
+                  });
+                  finalDomCountsPerTable = currentTbodies.map(tbody => tbody.querySelectorAll('tr').length);
+                  domEvidenceCaptured = true;
+                }
+                return iframeOriginalQuerySelector.call(this, sel);
+              };
+              iframeHookInstalled = true;
+            }
+            return result;
+          };
+
+          const { exportToPDF } = await import('/src/utils/printHtml.ts');
+          await exportToPDF(cfg.printData);
+          
+        } catch(e) {
+          error = e.message;
+        } finally {
+          // Strict Restoration
+          if (originalCreateObjectURL) {
+             URL.createObjectURL = originalCreateObjectURL;
+             createObjectURLRestored = (URL.createObjectURL === originalCreateObjectURL);
+          }
+          if (originalAppendChild) {
+             Node.prototype.appendChild = originalAppendChild;
+             appendChildRestored = (Node.prototype.appendChild === originalAppendChild);
+          }
+          if (iframeHookInstalled && capturedContentWindow && iframeOriginalQuerySelector) {
+             try {
+                 capturedContentWindow.Element.prototype.querySelector = iframeOriginalQuerySelector;
+                 iframeQuerySelectorRestored = (capturedContentWindow.Element.prototype.querySelector === iframeOriginalQuerySelector);
+             } catch(e) {
+                 iframeQuerySelectorRestored = false;
+             }
+          }
+          hooksRestored = createObjectURLRestored && appendChildRestored && iframeQuerySelectorRestored;
+        }
+        
+        const remainingIframes = document.querySelectorAll('iframe').length;
+        
+        return {
+            error, pdfBlobCaptured, pdfHeaderValid, remainingIframes,
+            iframeHookInstalled, p3Injected, domEvidenceCaptured,
+            hooksRestored, createObjectURLRestored, appendChildRestored, iframeQuerySelectorRestored,
+            finalDomCountsPerTable, finalDomOrdersPerTable
+        };
+      }, testName, config);
+    };
+
+    const runRequireStringPartTests = async () => {
+      return await page.evaluate(async () => {
+        let results = [];
+        const { requireStableStringPart } = await import('/src/utils/printHtml.ts');
+        
+        // 1. undefined
+        try { requireStableStringPart(undefined, 'ctx'); results.push('FAIL'); } catch (e) { results.push('PASS'); }
+        // 2. null
+        try { requireStableStringPart(null, 'ctx'); results.push('FAIL'); } catch (e) { results.push('PASS'); }
+        // 3. number
+        try { requireStableStringPart(123, 'ctx'); results.push('FAIL'); } catch (e) { results.push('PASS'); }
+        // 4. whitespace
+        try { requireStableStringPart('   ', 'ctx'); results.push('FAIL'); } catch (e) { results.push('PASS'); }
+        // 5. valid
+        try { 
+           const v = requireStableStringPart('  text  ', 'ctx'); 
+           if (v === 'text') results.push('PASS'); 
+           else results.push('FAIL');
+        } catch (e) { results.push('FAIL'); }
+        
+        return results;
+      });
+    };
+
+    console.log('\\n--- Running requireStableStringPart Tests ---');
+    const rTests = await runRequireStringPartTests();
+    if (rTests.some(r => r !== 'PASS')) {
+       console.error('requireStableStringPart tests failed:', rTests);
+       allTestsPassed = false;
+    } else {
+       console.log('requireStableStringPart tests passed.');
+    }
+
+    // A) Positive Control
+    const printDataPositive = {
+      filename: 'Positive.pdf', title: 'Positive', organizationName: 'Org', departmentName: 'Dept',
+      metaFields: [{label: 'Test', value: 'Value'}],
+      tables: [
+        { headers: ['H1'], rows: [['R1']], recordIds: ['R1'] },
+        { headers: ['H2'], rows: [['R2']], recordIds: ['R2'] }
+      ]
+    };
+    const resPositive = await runTestCase('Positive', { case: null, printData: printDataPositive });
+    if (resPositive.error || !resPositive.pdfBlobCaptured || !resPositive.pdfHeaderValid || resPositive.remainingIframes !== 0 || !resPositive.hooksRestored) {
+       console.error('Positive Control FAILED:', resPositive);
+       allTestsPassed = false;
+    } else {
+       console.log('Positive Control PASSED.');
+    }
+
+    // B) Corruption A-D
+    const runCorruptionCase = async (caseName, pData, errKeyword) => {
+       const res = await runTestCase(caseName, { case: caseName, printData: pData });
+       const passed = res.error && res.error.includes(errKeyword) && 
+                      !res.pdfBlobCaptured && !res.pdfHeaderValid && 
+                      res.remainingIframes === 0 && res.hooksRestored &&
+                      res.domEvidenceCaptured;
+       if (!passed) {
+          console.error(\`Corruption Case \${caseName} FAILED:\`, res);
+          allTestsPassed = false;
+       } else {
+          console.log(\`Corruption Case \${caseName} PASSED (Blocked successfully).\`);
+       }
+    };
+    await runCorruptionCase('A', {
+      filename: 'A.pdf', title: 'A', organizationName: 'Org', departmentName: 'Dept',
+      tables: [{ headers: ['H1'], rows: [['P3-A-R1'], ['P3-A-R2'], ['P3-A-R3']], recordIds: ['R1', 'R2', 'R3'] }]
+    }, 'ترتيب غير متطابق أو استبدال');
+
+    await runCorruptionCase('B', {
+      filename: 'B.pdf', title: 'B', organizationName: 'Org', departmentName: 'Dept',
+      tables: [{ headers: ['H1'], rows: [['P3-B-R1'], ['P3-B-R2'], ['P3-B-R3']], recordIds: ['R1', 'R2', 'R3'] }]
+    }, 'مجهول الهوية');
+
+    await runCorruptionCase('C', {
+      filename: 'C.pdf', title: 'C', organizationName: 'Org', departmentName: 'Dept',
+      tables: [{ headers: ['H1'], rows: [['P3-C-R1'], ['P3-C-R2'], ['P3-C-R3'], ['P3-C-R4']], recordIds: ['R1', 'R2', 'R3', 'R4'] }]
+    }, 'تكرار السجل المرسوم');
+
+    await runCorruptionCase('D', {
+      filename: 'D.pdf', title: 'D', organizationName: 'Org', departmentName: 'Dept',
+      tables: [
+        { headers: ['H1'], rows: [['P3-D-T0-R1'], ['P3-D-T0-R2']], recordIds: ['R1', 'R2'] },
+        { headers: ['H1'], rows: [['P3-D-T1-R1'], ['P3-D-T1-R2']], recordIds: ['R1', 'R2'] }
+      ]
+    }, 'مجهول الهوية'); // replacement node
+
+    // C) Preflight negatives
+    const runPreflightCase = async (name, pData, errKeyword) => {
+       const res = await runTestCase(name, { case: null, printData: pData });
+       const iframeNeverAppended = !res.iframeHookInstalled; // Hook is installed on first appendChild of iframe
+       const passed = res.error && res.error.includes(errKeyword) && iframeNeverAppended && !res.pdfBlobCaptured;
+       if (!passed) {
+          console.error(\`Preflight Case \${name} FAILED:\`, res);
+          allTestsPassed = false;
+       } else {
+          console.log(\`Preflight Case \${name} PASSED (Blocked successfully).\`);
+       }
+    };
+    
+    await runPreflightCase('missing recordIds', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']] }]
+    }, 'يفتقد recordIds');
+
+    await runPreflightCase('length mismatch', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: ['R1', 'R2'] }]
+    }, 'لا يطابق rows');
+
+    await runPreflightCase('non-string undefined', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: [undefined] }]
+    }, 'الهوية ليست نصاً');
+    
+    await runPreflightCase('non-string null', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: [null] }]
+    }, 'الهوية ليست نصاً');
+    
+    await runPreflightCase('non-string number', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: [123] }]
+    }, 'الهوية ليست نصاً');
+    
+    await runPreflightCase('blank/whitespace', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1']], recordIds: ['   '] }]
+    }, 'الهوية نص فارغ');
+
+    await runPreflightCase('duplicate after trim', {
+       filename: 'PF.pdf', title: 'PF', organizationName: 'Org', departmentName: 'Dept',
+       tables: [{ headers: ['H1'], rows: [['R1'], ['R2']], recordIds: [' R1 ', 'R1'] }]
+    }, 'تكرار في الهوية');
+
+  } catch (e) {
+    console.error("Test framework error:", e);
+    allTestsPassed = false;
+  } finally {
+    if (browser) await browser.close();
+    if (allTestsPassed) {
+       console.log('\\nPHASE3_ID_INTEGRITY_GUARD_PASSED');
+       process.exitCode = 0;
+    } else {
+       console.log('\\nPHASE3_ID_INTEGRITY_GUARD_FAILED');
+       process.exitCode = 1;
+    }
+  }
+}
+
+runGuardTests().catch(e => {
+   console.error(e);
+   process.exitCode = 1;
+});
+`;
+
+fs.writeFileSync('tests/phase3_id_integrity_guard.test.ts', testContent);

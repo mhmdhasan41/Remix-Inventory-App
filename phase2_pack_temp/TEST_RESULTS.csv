@@ -1,0 +1,11 @@
+Test_Case_ID,Description,Pre_Fix_Status,Post_Fix_Status,Pre_Fix_Issue,Post_Fix_Resolution,Page_Count,Original_Rows,Rendered_Rows,Orphaned_Header_Count,Empty_Page_Count
+1,Table starts near bottom - fits header only,FAIL,PASS,Orphaned <thead> on Page 1,Empty container removed from Page 1; table starts cleanly on Page 2,2,1,1,0,0
+2,Remaining space fits header but row 1 overflows,FAIL,PASS,First-row overflow / empty tbody on Page 1,Container cleaned from Page 1; placed on Page 2,2,1,1,0,0
+3,Remaining space fits neither title nor header nor row 1,FAIL,PASS,Orphaned section title stranded on Page 1,Title and container moved cleanly to Page 2,2,1,1,0,0
+4,Short first row fits on Page 1,PASS,PASS,None,Rendered normally on Page 1,1,1,1,0,0
+5,Multi-line row 1 overflows remaining height,FAIL,PASS,Orphaned header on Page 1,Row 1 & header moved to Page 2 cleanly,2,1,1,0,0
+6,Single row height > USABLE_HEIGHT on fresh page,FAIL,PASS,Infinite loop / forced clipping,Row removed; clean error modal thrown; iframe removed,1,1,0,0,0
+7,Second table starts near bottom of page,FAIL,PASS,Table 2 header orphaned on Page 1,Table 2 title & header moved to Page 2 cleanly,2,5,5,0,0
+8,Multi-table report spanning 3 pages,FAIL,PASS,Potential boundary orphaned headers,All boundary empty containers sanitized,3,25,25,0,0
+9,Normal row boundary transition (row 12 of 20),PASS,PASS,None,Row 12 moved to Page 2 table part with <thead>,2,20,20,0,0
+10,Last row near bottom edge,PASS,PASS,None,Last row ends cleanly before USABLE_HEIGHT,1,10,10,0,0

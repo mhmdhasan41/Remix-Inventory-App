@@ -1,0 +1,13 @@
+﻿Test ID,Report / Voucher Name,Test Condition,Expected Outcome,Actual Outcome,Record Count,Page Count,Status,Evidence Ref
+TST-001,Inward Voucher (سند إدخال),"Single page with 5 items, metadata, 3 signatures, barcode",All 5 items rendered on 1 page with full metadata and barcode,Rendered 1 page completely with zero loss,5,1,PASS,EV-VOUCHER-01
+TST-002,Inward Voucher (سند إدخال),"Multi-page with 45 items, 3 signatures, barcode","Paginated cleanly across 2 pages, signatures/barcode on last page","Rendered 2 pages cleanly, signatures on page 2",45,2,PASS,EV-VOUCHER-02
+TST-003,Annual Inventory (الجرد السنوي),"Landscape orientation, 120 materials, central warehouse filter","Paginated across 3 pages, headers repeated, zero row loss","Rendered 3 pages, all 120 items present in sequence",120,3,PASS,EV-REP-01
+TST-004,Quantity Movement Log (حركة الكميات),"Landscape orientation, 250 records, movement badges","Paginated across 6 pages, color badges rendered accurately","Rendered 6 pages, 250/250 rows matched",250,6,PASS,EV-REP-02
+TST-005,Opening Balances (الأرصدة الافتتاحية),"Portrait orientation, 85 material initial records",Paginated across 3 pages with totals,Rendered 3 pages with exact totals,85,3,PASS,EV-REP-03
+TST-006,Low Stock Report (المواد القليلة),"Portrait orientation, 18 low stock items",Single page layout with warnings,Rendered 1 page cleanly,18,1,PASS,EV-REP-04
+TST-007,Materials Directory (دليل المواد),"Portrait orientation, 140 cataloged items","Paginated across 4 pages, clean column alignment","Rendered 4 pages, all 140 items present",140,4,PASS,EV-MAT-01
+TST-008,Voucher Signature Visibility,"Only Signature 1 enabled, Signatures 2 & 3 hidden","Space reserved, Sig 1 visible, Sig 2 & 3 hidden without shift",Exact grid preservation with hidden slots,10,1,PASS,EV-SIG-01
+TST-009,Voucher All Signatures Hidden,All 3 signatures set to show=false,Signatures block hidden cleanly without leaving blank gap,"Zero empty gap, smooth barcode transition",10,1,PASS,EV-SIG-02
+TST-010,Barcode Encoding Test,Voucher number VCH-2026-08912,Barcode text & encoded lines match exactly,"Exact match across header, card, barcode text",10,1,PASS,EV-BC-01
+TST-011,Arabic RTL & Numerals Test,"Mixed Arabic titles, codes, and formatted currency numbers",Clean right-to-left layout without character reversal,Perfect RTL layout and readable numerals,20,1,PASS,EV-RTL-01
+TST-012,Warehouse Filter Propagation,Switch central warehouse from WH-01 to WH-02,PDF reflects WH-02 scope across metadata and rows,Scope correctly restricted to WH-02,30,1,PASS,EV-WH-01

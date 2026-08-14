@@ -1,0 +1,32 @@
+===============================================================================
+                     PDF SUBSYSTEM SECURITY AUDIT REPORT
+===============================================================================
+
+1. HTML INJECTION & XSS PROTECTION:
+  - User-supplied strings (Titles, Metadata values, Item names, Notes) are passed
+    into HTML templates.
+  - Sanitization Audit: `table.headers[cIdx].replace(/<[^>]+>/g, '')` strips
+    HTML tags during column width evaluation.
+  - Recommendation: Enforce standard HTML entity escaping (`&`, `<`, `>`, `"`) for all
+    dynamically interpolated cell text in `printHtml.ts` to guarantee defense-in-depth
+    against XSS payloads in user input fields.
+
+2. IFRAME SANDBOX & ISOLATION:
+  - Export iframe is constructed offscreen at `left: -9999px` with `opacity: 0.01`
+    and `pointer-events: none`.
+  - DOM Lifecycle: Iframe is appended to `document.body` during export and strictly
+    removed in `finally { iframe.parentNode.removeChild(iframe); }`.
+  - Zero residual DOM elements remain after execution.
+
+3. CREDENTIALS & SESSIONS PRIVACY:
+  - PDF headers, metadata, and barcodes contain ONLY domain operational data
+    (Organization name, Department, Date, Time, Voucher ID).
+  - No secret tokens, API keys, passwords, session cookies, or user auth tokens
+    are serialized into exported HTML or PDF metadata.
+
+4. WAREHOUSE SCOPE ISOLATION:
+  - Central warehouse selector in state directly conditions queries passed to
+    `exportToPDF`.
+  - Data from unselected warehouses is filtered out before `PrintData` object
+    construction, preventing unauthorized cross-warehouse data exposure.
+===============================================================================

@@ -1,0 +1,6 @@
+{
+  "name": "Remix: Inventory App",
+  "description": "An inventory management application for مكتب صحة البيئة - خان يونس - دائرة البنى التحتية والتخطيط والتطوير",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

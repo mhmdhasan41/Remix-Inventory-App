@@ -1,0 +1,12 @@
+#!/bin/bash
+cat src/services/dataService.ts | awk '
+BEGIN { in_func = 0; }
+/^  getTransactions: \(/ { 
+    in_func = 1; 
+    print "  getTransactions: (): InventoryTransaction[] => {\n    let data = localStorage.getItem(STORAGE_KEYS.TRANSACTIONS);\n    if (!data) {\n      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(INITIAL_TRANSACTIONS));\n      data = JSON.stringify(INITIAL_TRANSACTIONS);\n    }\n    \n    let parsed: InventoryTransaction[] = JSON.parse(data);\n    let needsSave = false;\n    \n    // Migration for transaction numbers and suffixes\n    parsed = parsed.map(tx => {\n      let modified = false;\n      if (tx.transactionNumber && tx.transactionNumber.includes('\''-صادر'\'')) {\n        tx.transactionNumber = tx.transactionNumber.replace('\''-صادر'\'', '\''-OUT'\'');\n        modified = true;\n      }\n      if (tx.transactionNumber && tx.transactionNumber.includes('\''-وارد'\'')) {\n        tx.transactionNumber = tx.transactionNumber.replace('\''-وارد'\'', '\''-IN'\'');\n        modified = true;\n      }\n      if (!tx.transactionNumber) {\n        // Generate a pseudo-number if totally missing based on its ID so it has something\n        let prefix = '\''GEN'\'';\n        if (tx.transactionType === '\''وارد'\'') prefix = '\''W'\'';\n        else if (tx.transactionType === '\''صادر'\'') prefix = '\''O'\'';\n        else if (tx.transactionType === '\''مستهلك'\'') prefix = '\''C'\'';\n        else if (tx.transactionType === '\''تحويل'\'') prefix = '\''T'\'';\n        else if (tx.transactionType === '\''تسوية'\'') prefix = '\''A'\'';\n        else if (tx.transactionType === '\''افتتاحي'\'') prefix = '\''OP'\'';\n        \n        tx.transactionNumber = `${prefix}-${tx.id.replace(/[^0-9]/g, '\'''\'') || Math.floor(Math.random() * 1000).toString().padStart(4, '\''0'\'')}`;\n        if (tx.transactionType === '\''تحويل'\'') {\n           if (tx.transferType === '\''in'\'') tx.transactionNumber += '\''-IN'\'';\n           else tx.transactionNumber += '\''-OUT'\'';\n        }\n        modified = true;\n      }\n      if (modified) needsSave = true;\n      return tx;\n    });\n\n    if (needsSave) {\n      localStorage.setItem(STORAGE_KEYS.TRANSACTIONS, JSON.stringify(parsed));\n    }\n\n    return parsed.sort((a, b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());\n  },"; 
+    next; 
+}
+/^  saveTransaction: / { in_func = 0; print; next; }
+{ if (!in_func) print; }
+' > src/services/dataService.ts.new
+mv src/services/dataService.ts.new src/services/dataService.ts

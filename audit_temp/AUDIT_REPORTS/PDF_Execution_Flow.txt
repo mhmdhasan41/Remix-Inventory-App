@@ -1,0 +1,80 @@
+===============================================================================
+                       PDF GENERATION EXECUTION FLOW TRACE
+===============================================================================
+
+[User Action: Clicks "Export PDF" / "تصدير PDF" Button]
+       │
+       ▼
+[1. Controller Stage (Reports.tsx / Transactions.tsx / Materials.tsx)]
+  ├── Reads active filters (Warehouse ID, Date Range, Search Query)
+  ├── Queries local/Firestore state with active Warehouse scope
+  ├── Builds PrintData object:
+  │     ├── title: Report Name
+  │     ├── organizationName: Organization / Company Name
+  │     ├── departmentName: Warehouse / Dept Name
+  │     ├── metaFields: Key-value metadata pairs
+  │     ├── tables: [{ headers: [...], rows: [...], columnAlignments: [...], rowBgColors: [...] }]
+  │     ├── notes: Optional text note
+  │     ├── signatures: Signature roles & names
+  │     └── barcode: Voucher barcode number string
+  └── Invokes `exportToPDF(printData)`
+
+       │
+       ▼
+[2. PDF Engine Initialization (printHtml.ts)]
+  ├── Determines orientation ('portrait' | 'landscape')
+  ├── Calculates PAGE_WIDTH (820px portrait / 1120px landscape)
+  ├── Calculates PAGE_HEIGHT (1195px portrait / 768px landscape)
+  ├── Creates offscreen <iframe> at left: -9999px
+  └── Writes HTML template shell & CSS styles into iframe document
+
+       │
+       ▼
+[3. Layout Measurement & Column Width Calculation]
+  ├── Awaits font loading: `document.fonts.ready`
+  ├── Renders full raw table into `#measure-container`
+  ├── Measures bounding rectangle width of every column cell in header
+  ├── Stores column width array `tableColWidths`
+  └── Clears `#measure-container`
+
+       │
+       ▼
+[4. Dynamic Page Building Loop]
+  ├── Initializes page counter `currentPageNum = 1`
+  ├── Creates initial `.pdf-page` container with header, title, and metadata table
+  ├── Iterates over `data.tables`:
+  │     ├── Injects `<table>` with predefined column widths
+  │     └── Iterates over each data row `tr`:
+  │           ├── Appends row to `<tbody>`
+  │           ├── Measures cumulative page height `getUsedHeight(pageDiv)`
+  │           └── IF `usedHeight > USABLE_HEIGHT`:
+  │                 ├── Pops last row out of page
+  │                 ├── Creates new `.pdf-page`
+  │                 ├── Injects top header & table structure
+  │                 └── Re-appends row to new page `<tbody>`
+  ├── Appends Notes block (moves to new page if overflowing)
+  ├── Appends Signatures Grid (moves to new page if overflowing)
+  └── Appends Barcode Container (moves to new page if overflowing)
+
+       │
+       ▼
+[5. Row Count Integrity Validation]
+  ├── Compares `totalOriginalRows` vs `totalRenderedRows`
+  └── IF mismatch: Logs error `Row count mismatch! Original: X, Rendered: Y`
+
+       │
+       ▼
+[6. Page Stamping & Rasterization]
+  ├── Stamps page number footers ("صفحة X من Y")
+  ├── Converts pages to visible relative layout inside iframe
+  ├── For each `.pdf-page` element:
+  │     ├── Invokes `html2canvas(pageEl, { scale: 2.2, backgroundColor: '#ffffff' })`
+  │     └── Extracts JPEG image data URL (quality: 0.95)
+  ├── Injects image into `jsPDF` instance with exact A4 aspect ratio & 10mm margins
+  └── Triggers `pdf.save(filename)` browser download
+
+       │
+       ▼
+[7. Cleanup Phase]
+  └── In `finally` block: Removes temporary iframe element from DOM
+===============================================================================

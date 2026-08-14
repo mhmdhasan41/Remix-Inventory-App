@@ -1,0 +1,21 @@
+--- a/src/utils/printHtml.ts
++++ b/src/utils/printHtml.ts
+@@ -220,11 +220,11 @@
+-        /* Global Table Styles (Pre-Isolation) */
+-        table {
+-          border-collapse: separate;
+-          border-spacing: 0;
+-          overflow: hidden;
+-        }
++        /* Isolated Metadata Card Table (Vouchers & Meta) */
++        .meta-table {
++          border-collapse: separate;
++          border-spacing: 0;
++        }
++
++        /* General Data Tables (Reports) */
++        table {
++          border-collapse: collapse;
++          border-spacing: 0;
++          overflow: visible !important;
++        }

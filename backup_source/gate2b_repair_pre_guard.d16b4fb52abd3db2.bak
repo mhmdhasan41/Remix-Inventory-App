@@ -1,0 +1,82 @@
+// @ts-nocheck
+import { exportToPDF, requireStableStringPart } from '../src/utils/printHtml';
+import { JSDOM } from 'jsdom';
+import assert from 'assert';
+
+// Setup basic DOM
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+  url: "http://localhost",
+});
+global.document = dom.window.document;
+global.window = dom.window;
+global.URL.createObjectURL = () => 'blob:http://localhost/mock';
+global.URL.revokeObjectURL = () => {};
+
+// We can't mock imports easily with ts-node without a test runner.
+// But we only care about preflight checks! The preflight checks throw BEFORE html2canvas or jsPDF are used.
+// We can test those safely.
+
+async function runTests() {
+  console.log('Running phase3_id_integrity_guard.test.ts...');
+
+  // 1. Component helper negatives
+  try {
+    requireStableStringPart(undefined, 'test');
+    assert.fail('Should have thrown on undefined');
+  } catch (e) {
+    if (!e.message.includes('غائبة أو ليست نصاً')) throw e;
+  }
+  
+  try {
+    requireStableStringPart('   ', 'test');
+    assert.fail('Should have thrown on whitespace');
+  } catch (e) {
+    if (!e.message.includes('نص فارغ')) throw e;
+  }
+
+  const validData = {
+    title: 'Test',
+    tables: [
+      {
+        headers: ['H1'],
+        rows: [['R1']],
+        recordIds: ['id1']
+      }
+    ]
+  };
+
+  // 2. Preflight negatives: length mismatch
+  const lengthMismatch = { ...validData, tables: [{ ...validData.tables[0], recordIds: ['id1', 'id2'] }] };
+  try {
+    await exportToPDF(lengthMismatch);
+    assert.fail('Should have thrown length mismatch');
+  } catch (e) {
+    if (!e.message.includes('لا يطابق rows')) throw e;
+  }
+
+  // 3. Preflight negatives: missing recordIds
+  const missingIds = { ...validData, tables: [{ headers: ['H1'], rows: [['R1']] }] };
+  try {
+    await exportToPDF(missingIds);
+    assert.fail('Should have thrown missing recordIds');
+  } catch (e) {
+    if (!e.message.includes('مصفوفة المعرفات (recordIds) غائبة')) throw e;
+  }
+
+  // 4. Preflight negatives: blank
+  const blankIds = { ...validData, tables: [{ headers: ['H1'], rows: [['R1']], recordIds: ['  '] }] };
+  try {
+    await exportToPDF(blankIds);
+    assert.fail('Should have thrown blank id');
+  } catch (e) {
+    if (!e.message.includes('لا يمكن أن يكون فارغاً')) throw e;
+  }
+
+  console.log('All guard tests passed!');
+  process.exit(0);
+}
+
+runTests().catch(e => {
+  console.error('Test failed:', e);
+  process.exit(1);
+});

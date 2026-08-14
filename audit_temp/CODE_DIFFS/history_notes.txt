@@ -1,0 +1,3 @@
+HISTORICAL REVISION NOTES:
+1. Voucher Card Border Fix: Isolated `.meta-card-container` and `.meta-table` CSS rules with `border-collapse: separate` and `background-clip: padding-box` so voucher card borders render fully with white cell backgrounds and subtle header fills.
+2. Report Multi-page Pagination Restoration: Ensured general report data tables (`.table-container table`) retain `border-collapse: collapse` and `overflow: visible` without global `td`/`th` overrides. This resolved the single-page pagination regression and eliminated top empty rows across all multi-page inventory reports.

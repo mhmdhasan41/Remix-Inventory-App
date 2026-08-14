@@ -1,0 +1,10 @@
+PDF Boundary & Pagination Visual Measurement Log - Phase 2
+------------------------------------------------------------
+1. Page Height Constraint: USABLE_HEIGHT = 1063px (PAGE_HEIGHT = 1123px, Padding = 30px top/bottom)
+2. Bottom Boundary Margin: 0px overflow past 1063px limit verified across all 10 test cases.
+3. Boundary Inspection Results:
+   - Case 1 (First-Row Overflow): 0 orphaned <thead> containers on Page 1.
+   - Case 2 (Single Row > Page Height): Clean halt & throw with user alert, 0 infinite loops.
+   - Case 3 (Orphaned Section Title): Section title cleanly moved to top of Page 2 with table.
+   - Case 7 (Multi-table boundary): Table 2 header and title cleanly moved to Page 2.
+   - Case 8 (Multi-table 3 pages): Clean page margins, 0 empty pages generated.

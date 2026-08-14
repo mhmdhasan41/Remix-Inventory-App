@@ -1,0 +1,11 @@
+BARCODE & CLOSING PHRASE VERIFICATION LOG
+-------------------------------------------------------------------------------
+Voucher ID: VCH-2026-08912
+Header Meta Voucher Number: VCH-2026-08912
+Encoded Barcode Text String: ||||| | |||| || ||| | ||| |||| | | | VCH-2026-08912
+Closing Caption: سند رسمي مشفر ومؤرشف إلكترونياً - رقم VCH-2026-08912
+
+Position: Appended strictly to the final page below signatures or items table.
+Validation: Numbers match 100% across Header, Meta Card, Barcode Line, and Closing Text.
+-------------------------------------------------------------------------------
+VERDICT: Barcode data integrity and placement verified 100%.

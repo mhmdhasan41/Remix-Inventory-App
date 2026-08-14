@@ -1,0 +1,211 @@
+import puppeteer from 'puppeteer';
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
+
+const EXPECTED_PRINT_HTML_HASH = '2c2384af368f9429ca426fcc2a896c3991c09eae13c24159b37c6d76772f49ee';
+const EXPECTED_TEST_HASH = '19958d930daa816b3f968ca35de1187575629409354e5584227ebd59f1406163';
+const EXPECTED_REPORTS_HASH = '242af967386cb17e943dc44952abf356bac73ea68dbff5aa3ad8f50431920fda';
+const EXPECTED_MATERIALS_HASH = '4ec3681f3ea2349bf8314dfd75f83346787eadd9f33b43c9526cc9885e141c13';
+const EXPECTED_TRANSACTIONS_HASH = 'a98e20036a033b3f2b88cab73ed1f89119ebdf03fb2e31f6b8cf6dc340bc3bd4';
+
+function checkHash(file: string, expected: string) {
+  const p = path.resolve(file);
+  const buf = fs.readFileSync(p);
+  const hash = crypto.createHash('sha256').update(buf).digest('hex');
+  if (hash !== expected) {
+    console.error(`Hash mismatch for ${file}. Expected ${expected}, got ${hash}`);
+    process.exit(1);
+  }
+}
+
+checkHash('src/utils/printHtml.ts', EXPECTED_PRINT_HTML_HASH);
+checkHash('tests/run_real_integration_test.ts', EXPECTED_TEST_HASH);
+checkHash('src/pages/Reports.tsx', EXPECTED_REPORTS_HASH);
+checkHash('src/pages/Materials.tsx', EXPECTED_MATERIALS_HASH);
+checkHash('src/pages/Transactions.tsx', EXPECTED_TRANSACTIONS_HASH);
+
+async function runBaseline() {
+  const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
+  const page = await browser.newPage();
+  
+  await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded' });
+  
+  await page.evaluate(() => {
+    const origQuerySelector = Element.prototype.querySelector;
+    (window as any).__p3_injected = false;
+    
+    Element.prototype.querySelector = function(sel: string) {
+      if (sel === '.page-num-placeholder' && !(window as any).__p3_injected && (window as any).__p3_baseline_inject) {
+        (window as any).__p3_injected = true;
+        (window as any).__p3_baseline_inject(this.ownerDocument);
+      }
+      return origQuerySelector.call(this, sel);
+    };
+
+    const originalCreateObjectURL = URL.createObjectURL;
+    (window as any).__origCreateObjectURL = originalCreateObjectURL;
+    
+    URL.createObjectURL = function(blob: Blob) {
+      const url = originalCreateObjectURL.call(this, blob);
+      if (blob && blob.type === 'application/pdf') {
+        (window as any).__pdfCapturePromise = blob.arrayBuffer().then((buf: ArrayBuffer) => {
+          const bytes = new Uint8Array(buf);
+          if (bytes.length >= 4 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+            (window as any).__lastCapturedPdf = true; // just boolean
+            return true;
+          }
+          return null;
+        });
+      }
+      return url;
+    };
+  });
+
+  const runTestCase = async (testName: string, config: any) => {
+    return await page.evaluate(async (name, cfg) => {
+      (window as any).__p3_injected = false;
+      (window as any).__lastCapturedPdf = false;
+      (window as any).__pdfCapturePromise = null;
+      
+      (window as any).__p3_baseline_inject = function(doc: Document) {
+         // Perform injection
+         const rows = Array.from(doc.querySelectorAll('tbody tr'));
+         if (cfg.case === 'A') {
+            // Reorder R1, R2, R3 -> R2, R1, R3
+            if (rows.length >= 3) {
+               const tbody = rows[0].parentNode;
+               if (tbody) {
+                  tbody.insertBefore(rows[1], rows[0]);
+               }
+            }
+         } else if (cfg.case === 'B') {
+            // Substitution: R1, R2, R3 -> replace R2 with X
+            if (rows.length >= 3) {
+               const tbody = rows[0].parentNode;
+               if (tbody) {
+                  const newRow = doc.createElement('tr');
+                  newRow.innerHTML = '<td>X</td><td>X</td><td>X</td><td>X</td>';
+                  newRow.setAttribute('data-injected', 'true');
+                  tbody.replaceChild(newRow, rows[1]);
+               }
+            }
+         } else if (cfg.case === 'C') {
+            // Duplicate + Loss: R1, R2, R3, R4 -> R1, R2, R2, R4
+            if (rows.length >= 4) {
+               const tbody = rows[0].parentNode;
+               if (tbody) {
+                  const clone = rows[1].cloneNode(true);
+                  tbody.replaceChild(clone, rows[2]);
+               }
+            }
+         } else if (cfg.case === 'D') {
+            // Multi-table. Duplicate in table 1.
+            const tbodies = doc.querySelectorAll('tbody');
+            if (tbodies.length >= 2) {
+               const t1Rows = tbodies[1].querySelectorAll('tr');
+               if (t1Rows.length >= 2) {
+                  const clone = t1Rows[0].cloneNode(true);
+                  tbodies[1].replaceChild(clone, t1Rows[1]);
+               }
+            }
+         }
+      };
+
+      const { exportToPDF } = await import('/src/utils/printHtml.ts');
+      
+      let error = null;
+      try {
+        await exportToPDF(cfg.printData);
+        if ((window as any).__pdfCapturePromise) {
+          await (window as any).__pdfCapturePromise;
+        }
+      } catch(e: any) {
+        error = e.message;
+      }
+      
+      const pdfCaptured = (window as any).__lastCapturedPdf;
+      const remainingIframes = document.querySelectorAll('iframe').length;
+      
+      return { error, pdfCaptured, remainingIframes };
+    }, testName, config);
+  };
+
+  const results = [];
+
+  // Case A: Reorder with same count (3)
+  console.log("Running Case A...");
+  const resA = await runTestCase('Case A', {
+    case: 'A',
+    printData: {
+      filename: 'A.pdf', title: 'A', organizationName: 'Org', departmentName: 'Dept',
+      tables: [{ headers: ['H1'], rows: [['R1'], ['R2'], ['R3']] }]
+    }
+  });
+  results.push({ name: 'A', expectedError: false, result: resA, sourceCount: 3, finalCount: 3 });
+
+  // Case B: Substitution
+  console.log("Running Case B...");
+  const resB = await runTestCase('Case B', {
+    case: 'B',
+    printData: {
+      filename: 'B.pdf', title: 'B', organizationName: 'Org', departmentName: 'Dept',
+      tables: [{ headers: ['H1', 'H2', 'H3', 'H4'], rows: [['R1','','',''], ['R2','','',''], ['R3','','','']] }]
+    }
+  });
+  results.push({ name: 'B', expectedError: false, result: resB, sourceCount: 3, finalCount: 3 });
+
+  // Case C: Duplicate + Loss
+  console.log("Running Case C...");
+  const resC = await runTestCase('Case C', {
+    case: 'C',
+    printData: {
+      filename: 'C.pdf', title: 'C', organizationName: 'Org', departmentName: 'Dept',
+      tables: [{ headers: ['H1'], rows: [['R1'], ['R2'], ['R3'], ['R4']] }]
+    }
+  });
+  results.push({ name: 'C', expectedError: false, result: resC, sourceCount: 4, finalCount: 4 });
+
+  // Case D: Multi-table
+  console.log("Running Case D...");
+  const resD = await runTestCase('Case D', {
+    case: 'D',
+    printData: {
+      filename: 'D.pdf', title: 'D', organizationName: 'Org', departmentName: 'Dept',
+      tables: [
+        { headers: ['H1'], rows: [['R1'], ['R2']] },
+        { headers: ['H1'], rows: [['R1'], ['R2']] }
+      ]
+    }
+  });
+  results.push({ name: 'D', expectedError: false, result: resD, sourceCount: 4, finalCount: 4 });
+
+  // Restore hooks
+  await page.evaluate(() => {
+    delete (window as any).__p3_injected;
+    delete (window as any).__p3_baseline_inject;
+    const orig = (window as any).__origCreateObjectURL;
+    if (orig) URL.createObjectURL = orig;
+    // We didn't save the original Element.prototype.querySelector on window directly but it's fine for this test runner
+  });
+
+  await browser.close();
+
+  let allVulnerable = true;
+  for (const r of results) {
+     console.log(`Case ${r.name}: error=${r.result.error}, pdfCaptured=${r.result.pdfCaptured}, remainingIframes=${r.result.remainingIframes}`);
+     if (r.result.error || !r.result.pdfCaptured || r.result.remainingIframes !== 0) {
+        allVulnerable = false;
+     }
+  }
+
+  if (allVulnerable) {
+     console.log('PHASE3_BASELINE_VULNERABILITY_CONFIRMED: unsafe PDF saves occurred with equal row counts');
+     process.exit(1);
+  } else {
+     console.log('Vulnerability NOT fully confirmed or test failed.');
+     process.exit(0);
+  }
+}
+
+runBaseline().catch(console.error);

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>سند إدخال مخزني - VCH-101</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+    body { font-family: 'Cairo', sans-serif; background-color: #f1f5f9; padding: 20px; color: #0f172a; }
+    .pdf-page { width: 820px; min-height: 1195px; padding: 30px; background: #fff; margin: 0 auto; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .page-header { display: flex; justify-content: space-between; border-bottom: 3px solid #007ab7; padding-bottom: 15px; margin-bottom: 25px; }
+    .org-name { font-size: 16px; font-weight: 700; color: #00557f; }
+    .report-title-container { text-align: center; margin-bottom: 20px; }
+    .report-title { font-size: 18px; font-weight: 700; color: #00557f; padding: 6px 20px; border-bottom: 3px solid #3394c5; }
+    .meta-card-container { border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #cbd5e1; margin-bottom: 20px; }
+    .meta-table { width: 100%; border-collapse: separate; border-spacing: 0; background: #cbd5e1; }
+    .meta-table td { padding: 8px 10px; font-size: 11.5px; border-bottom: 1px solid #cbd5e1; border-left: 1px solid #cbd5e1; }
+    .meta-label { background: #f1f5f9; font-weight: 700; color: #475569; width: 20%; text-align: right; }
+    .meta-value { background: #ffffff; font-weight: 600; color: #0f172a; width: 30%; text-align: right; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11.5px; }
+    th { background: #007ab7; color: #fff; font-weight: 700; padding: 8px; border: 1px solid #cbd5e1; text-align: center; }
+    td { padding: 8px; border: 1px solid #cbd5e1; text-align: center; color: #334155; }
+    tr:nth-child(even) td { background: #f1f5f9; }
+    tr:nth-child(odd) td { background: #ffffff; }
+    .signatures-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 40px; text-align: center; }
+    .sig-title { font-size: 12px; font-weight: 700; color: #334155; }
+    .sig-name { font-size: 13px; font-weight: bold; margin-top: 5px; }
+    .sig-line { margin-top: 25px; color: #94a3b8; font-size: 13px; }
+    .barcode-container { text-align: center; margin-top: 40px; border-top: 1px dashed #cbd5e1; padding-top: 15px; }
+  </style>
+</head>
+<body>
+  <div class="pdf-page">
+    <div class="page-header">
+      <div>
+        <div class="org-name">نظام إدارة المخازن المركزية</div>
+        <div style="font-size: 12px; color: #3394c5;">إدارة المستودعات العامة</div>
+      </div>
+      <div style="text-align: left; font-size: 12px; color: #475569;">
+        <div>التاريخ: 2026/08/10</div>
+        <div>الوقت: 10:15 صباحاً</div>
+        <div>صفحة 1 من 1</div>
+      </div>
+    </div>
+    <div class="report-title-container">
+      <div class="report-title">سند إدخال مخزني</div>
+    </div>
+    <div class="meta-card-container">
+      <table class="meta-table">
+        <tbody>
+          <tr>
+            <td class="meta-label">رقم السند:</td>
+            <td class="meta-value">VCH-2026-101</td>
+            <td class="meta-label">تاريخ الحركة:</td>
+            <td class="meta-value">2026/08/10</td>
+          </tr>
+          <tr>
+            <td class="meta-label">المستودع المستلم:</td>
+            <td class="meta-value">المستودع الرئيسي</td>
+            <td class="meta-label">المورد / الجهة:</td>
+            <td class="meta-value">شركة التوريدات العامة</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>كود المادة</th>
+          <th>اسم المادة</th>
+          <th>الوحدة</th>
+          <th>الكمية المدخلة</th>
+          <th>الملاحظات</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>MAT-001</td><td>ورق طباعة A4 فاخر</td><td>شدة</td><td>500</td><td>استلام مطابق للمواصفات</td></tr>
+        <tr><td>2</td><td>MAT-002</td><td>أقلام حبر أزرق جاف</td><td>علبة</td><td>200</td><td>تعديل مخزني مباشر</td></tr>
+        <tr><td>3</td><td>MAT-005</td><td>حبر طابعة HP لاسلكي</td><td>قطعة</td><td>30</td><td>توريد جديد</td></tr>
+      </tbody>
+    </table>
+    <div class="signatures-grid">
+      <div>
+        <div class="sig-title">أمين المستودع</div>
+        <div class="sig-name">أحمد الخالد</div>
+        <div class="sig-line">التوقيع: ....................</div>
+      </div>
+      <div>
+        <div class="sig-title">المسلم / المورد</div>
+        <div class="sig-name">محمد العلي</div>
+        <div class="sig-line">التوقيع: ....................</div>
+      </div>
+      <div>
+        <div class="sig-title">مدير المستودعات</div>
+        <div class="sig-name">د. خالد الموصل</div>
+        <div class="sig-line">التوقيع: ....................</div>
+      </div>
+    </div>
+    <div class="barcode-container">
+      <div style="font-family: monospace; letter-spacing: 4px; font-size: 14px;">||||| | |||| || ||| | ||| |||| | | | VCH-2026-101</div>
+      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">سند رسمي مشفر ومؤرشف إلكترونياً - رقم VCH-2026-101</div>
+    </div>
+  </div>
+</body>
+</html>

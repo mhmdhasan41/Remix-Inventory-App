@@ -1,0 +1,51 @@
+===============================================================================
+                        PDF SUBSYSTEM FILE MAP & MODULE MATRIX
+===============================================================================
+Applet ID: 102bc8cb-5c7c-4a92-aae8-023aff107e15
+Audit Date: 2026-08-10
+
+1. CORE PDF ENGINE:
+-------------------------------------------------------------------------------
+File: src/utils/printHtml.ts
+Functions:
+  - exportToPDF(data: PrintData & { filename: string; orientation?: 'portrait' | 'landscape' })
+    Description: Primary paginated PDF exporter using html2canvas + jsPDF.
+    Key Modules: Offscreen iframe setup, column width measuring pass (#measure-container),
+                 dynamic page builder (.pdf-page), height measurement engine (getUsedHeight),
+                 Notes/Signatures/Barcode appender, page number stamp, row integrity validator,
+                 canvas rasterizer (scale 2.2), jsPDF A4 layout engine.
+  - printHtml(data: PrintData)
+    Description: Native browser print dialog generator using temporary iframe.
+
+2. REPORT CONTROLLERS & UI ENTRY POINTS:
+-------------------------------------------------------------------------------
+File: src/pages/Reports.tsx
+  - Annual Inventory Report (تقرير الجرد السنوي)
+  - Quantity Movement Log (سجل حركة الكميات)
+  - Opening Balance Documentation (توثيق الأرصدة الافتتاحية)
+  - Low Stock Report (تقرير المواد النادرة / القليلة)
+  - Expiry Date Report (تقرير تاريخ الصلاحية)
+  - Inventory Valuation Report (تقرير تقييم المخزون)
+
+File: src/pages/Materials.tsx
+  - Materials Directory Report (تقرير دليل المواد)
+
+File: src/pages/Transactions.tsx
+  - Inward Voucher (سند إدخال مخزني)
+  - Outward Voucher (سند إخراج مخزني)
+  - Transfer Voucher (سند نقل / تحويل)
+  - Adjustment & Damage Voucher (سند تسوية / إتلاف)
+  - Modal Component: Voucher Print Preview (#printable-voucher)
+
+3. GLOBAL STYLING & MEDIA PRINT RULES:
+-------------------------------------------------------------------------------
+File: src/index.css
+  - @media print rules
+  - #printable-reportZone container styling
+  - Voucher modal print boundaries
+
+4. DEPENDENCY LIBRARIES:
+-------------------------------------------------------------------------------
+  - jspdf (^2.5.1 / ES module)
+  - html2canvas (^1.4.1)
+===============================================================================

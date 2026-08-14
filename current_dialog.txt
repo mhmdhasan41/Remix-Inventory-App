@@ -1,0 +1,305 @@
+      <Dialog 
+        open={openAddDialog} 
+        onClose={() => setOpenAddDialog(false)} 
+        maxWidth="md" 
+        fullWidth
+        slotProps={{ paper: { sx: { py: 1, direction: 'rtl' } } }}
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', color: '#1e293b' }}>
+          تسجيل حركة مخزنية جديدة (إدخال / إخراج)
+        </DialogTitle>
+        <form onSubmit={handleSubmit(onSubmitForm)}>
+          <DialogContent>
+            <Box className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2">
+              {/* Autocomplete selector combining materials and pesticides */}
+              <Box className="col-span-1 md:col-span-8">
+                <Controller
+                  name="itemSelection"
+                  control={control}
+                  render={({ field }) => (
+                    <Autocomplete
+                      {...field}
+                      value={field.value || null}
+                      options={getUnifiedItems()}
+                      getOptionLabel={(option) => `[${option.code}] - ${option.name} (${option.category || option.type || 'عام'}) - الرصيد: ${option.currentStock}`}
+                      isOptionEqualToValue={(option, value) => option.id === value?.id}
+                      onChange={(_, newValue) => {
+                        field.onChange(newValue);
+                        if (newValue) {
+                          setValue('supplierOrReceiver', 'وجهة غير محددة');
+                        }
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          label="اختر الصنف المخزني المراد تحريكه"
+                          error={!!errors.itemSelection}
+                          helperText={errors.itemSelection ? errors.itemSelection.message : 'اختر من القائمة بالرمز أو الاسم لتعبئة المؤشرات آلياً'}
+                        />
+                      )}
+                    />
+                  )}
+                />
+              </Box>
+
+              <Box className="col-span-1 md:col-span-4">
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="تاريخ تسجيل الحركة"
+                  slotProps={{ inputLabel: { shrink: true } }}
+                  {...register('date')}
+                  error={!!errors.date}
+                  helperText={errors.date?.message}
+                />
+              </Box>
+
+              <Box className="col-span-1 md:col-span-4">
+                <TextField
+                  select
+                  fullWidth
+                  label={watchTransactionType === 'تحويل' ? "المستودع المصدر" : "المستودع (تحديد فرع المخزون)"}
+                  {...register('storehouse')}
+                  value={watchStorehouse || ''}
+                  error={!!errors.storehouse}
+                  helperText={errors.storehouse?.message}
+                >
+                  {settings.storehouses.map((store) => (
+                    <MenuItem key={store} value={store}>{store}</MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+              
+              {watchTransactionType === 'تحويل' && (
+                <Box className="col-span-1 md:col-span-4">
+                  <TextField
+                    select
+                    fullWidth
+                    label="المستودع الوجهة"
+                    {...register('destStorehouse')}
+                    value={watchDestStorehouse || ''}
+                    error={!!errors.destStorehouse}
+                    helperText={errors.destStorehouse?.message}
+                  >
+                    {settings.storehouses.map((store) => (
+                      <MenuItem key={store} value={store}>{store}</MenuItem>
+                    ))}
+                  </TextField>
+                </Box>
+              )}
+              <Box className="col-span-1 md:col-span-4">
+                <TextField
+                  select
+                  fullWidth
+                  label="نوع الحركة المخزنية"
+                  {...register('transactionType')}
+                  value={watch('transactionType') || ''}
+                  defaultValue="وارد"
+                >
+                  <MenuItem value="وارد">وارد 🟢</MenuItem>
+                  <MenuItem value="صادر">صادر 🔴</MenuItem>
+                  <MenuItem value="مستهلك">مستهلك 🟠</MenuItem>
+                  <MenuItem value="تحويل">تحويل 🔄</MenuItem>
+                  <MenuItem value="تسوية">تسوية ⚖️</MenuItem>
+                  <MenuItem value="افتتاحي">افتتاحي 🆕</MenuItem>
+                </TextField>
+              </Box>
+
+              <Box className="col-span-1 md:col-span-4">
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="الكمية المطلوبة للتحكم"
+                  placeholder="مثال: 50"
+                  {...register('quantity', { valueAsNumber: true })}
+                  error={!!errors.quantity}
+                  helperText={errors.quantity?.message}
+                />
+              </Box>
+
+              <Box className="col-span-1 md:col-span-4">
+                <Controller
+                  name="supplierOrReceiver"
+                  control={control}
+                  render={({ field }) => {
+                    const currentType = watchTxType;
+                    const sortedPartners = [...(settings.partners || [])].sort((a, b) => {
+                      if (currentType === 'وارد') {
+                        if (a.type === 'مورد' && b.type !== 'مورد') return -1;
+                        if (a.type !== 'مورد' && b.type === 'مورد') return 1;
+                      } else {
+                        if (a.type === 'جهة مستلمة' && b.type !== 'جهة مستلمة') return -1;
+                        if (a.type !== 'جهة مستلمة' && b.type === 'جهة مستلمة') return 1;
+                      }
+                      return 0;
+                    });
+                    
+                    const partnerOptions = Array.from(new Set(sortedPartners.map(p => p.name)));
+
+                    return (
+                      <Autocomplete
+                        freeSolo
+                        options={partnerOptions}
+                        value={field.value || ''}
+                        onInputChange={(_, newInputValue) => {
+                          field.onChange(newInputValue);
+                        }}
+                        onChange={(_, newValue) => {
+                          field.onChange(newValue || '');
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="الجهة الموردة أو المستلمة الشريكة"
+                            placeholder="اختر من القائمة أو اكتب اسماً مخصصاً..."
+                            error={!!errors.supplierOrReceiver}
+                            helperText={errors.supplierOrReceiver ? errors.supplierOrReceiver.message : 'اختر جهة شريكة مسجلة أو اكتب اسماً مخصصاً'}
+                          />
+                        )}
+                        sx={{
+                          '& .MuiAutocomplete-input': {
+                            fontFamily: '"Cairo", sans-serif'
+                          }
+                        }}
+                      />
+                    );
+                  }}
+                />
+              </Box>
+
+              {/* Simulation metrics panel */}
+              {liveStockSim && (
+                <Box className="col-span-1 md:col-span-12">
+                  <Card variant="outlined" sx={{ bgcolor: liveStockSim.isNegative ? '#fef2f2' : '#e0f2fe', borderColor: liveStockSim.isNegative ? '#fee2e2' : '#bae6fd', borderRadius: '12px' }}>
+                    <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, '&:last-child': { pb: 2 } }}>
+                      <InfoIcon color={liveStockSim.isNegative ? 'error' : 'info'} />
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: liveStockSim.isNegative ? '#991b1b' : '#0369a1' }}>
+                          محاكاة محاسبة رصيد الصنف لحظياً:
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: liveStockSim.isNegative ? '#b91c1c' : '#0284c7', display: 'block', mt: 0.5 }}>
+                          الرصيد المتوفر حالياً في مستودع <strong>({liveStockSim.storehouseName})</strong>: <strong>{liveStockSim.current} {liveStockSim.unit}</strong> | 
+                          الرصيد المتوقع للمستودع بعد تنفيذ الحركة: <strong style={{ fontSize: '1.05rem' }}>{liveStockSim.simulated} {liveStockSim.unit}</strong>
+                          {liveStockSim.globalStock !== null && (
+                            <><br/>الرصيد الكلي المتوفر حالياً لجميع المستودعات: <strong>{liveStockSim.globalStock} {liveStockSim.unit}</strong> | 
+                            الرصيد الكلي المتوقع بعد تنفيذ الحركة: <strong style={{ fontSize: '1.05rem' }}>{liveStockSim.simulatedGlobalAfter} {liveStockSim.unit}</strong></>
+                          )}
+                        </Typography>
+                        {liveStockSim.isNegative && (
+                          <Typography variant="body2" sx={{ color: '#ef4444', fontWeight: 'bold', mt: 1 }}>
+                            ⚠️ خطأ رياضي: لا تملك رصيداً كافياً بالمستودع لصرف الكمية المدخلة! يرجى تخفيض الكمية أو توريد كميات كافية أولاً.
+                          </Typography>
+                        )}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Box>
+              )}
+
+              {/* Image attachment uploader field */}
+              <Box className="col-span-1 md:col-span-12">
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1.5, color: '#475569', fontFamily: '"Cairo", sans-serif' }}>
+                  إرفاق كرت الاستلام أو التسليم / مستند الحركة (صورة)
+                </Typography>
+                {!selectedImage ? (
+                  <Box
+                    sx={{
+                      border: '2px dashed #cbd5e1',
+                      borderRadius: '12px',
+                      p: 3,
+                      textAlign: 'center',
+                      bgcolor: '#f8fafc',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      '&:hover': {
+                        borderColor: '#0284c7',
+                        bgcolor: '#f0f9ff'
+                      }
+                    }}
+                    onClick={() => document.getElementById('receipt-image-upload')?.click()}
+                  >
+                    <input
+                      type="file"
+                      id="receipt-image-upload"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          try {
+                            const compressed = await compressImage(file);
+                            setSelectedImage(compressed);
+                            setImageToCrop(compressed); // Store it in case they want to crop it later
+                          } catch (err) {
+                            setErrorMessage('فشل قراءة الملف المختار أو ضغطه');
+                            setTimeout(() => setErrorMessage(null), 6000);
+                          }
+                          e.target.value = ''; // Reset input to allow selecting same file
+                        }
+                      }}
+                    />
+                    <Typography sx={{ fontSize: '2rem', mb: 1 }}>📸</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#475569', fontFamily: '"Cairo", sans-serif' }}>
+                      اضغط هنا لإرفاق مستند أو صورة كرت الاستلام/التسليم المخزني
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block', mt: 0.5, fontFamily: '"Cairo", sans-serif' }}>
+                      الامتدادات المدعومة: PNG, JPG, JPEG (سيتم ضغطها وتشفيرها تلقائياً بالمتصفح للحفاظ على الحصة السحابية المجانية وسرعة المزامنة)
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2.5, p: 2, borderRadius: '12px', bgcolor: '#f0fdf4', flexWrap: 'wrap' }}>
+                    <Box 
+                      component="img" 
+                      src={selectedImage} 
+                      alt="سند الاستلام" 
+                      sx={{ width: 75, height: 75, objectFit: 'cover', borderRadius: '8px', border: '1px solid #bbf7d0' }}
+                    />
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#166534', fontFamily: '"Cairo", sans-serif' }}>تم إرفاق صورة السند بنجاح 🟢</Typography>
+                      <Typography variant="caption" sx={{ color: '#4b5563', display: 'block', mt: 0.5, fontFamily: '"Cairo", sans-serif' }}>
+                        حجم المرفق: ~{Math.round(selectedImage.length / 1024)} كيلوبايت (مضغوطة لسرعة الرفع وحماية الـ Quotas)
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Button 
+                        variant="outlined" 
+                        color="primary" 
+                        size="small"
+                        onClick={() => {
+                          setImageToCrop(selectedImage);
+                          setCropZoom(1);
+                          setCropRotation(0);
+                          setCropPan({ x: 0, y: 0 });
+                          setOpenCropDialog(true);
+                        }}
+                        sx={{ borderRadius: '8px', fontWeight: 'bold', fontFamily: '"Cairo", sans-serif' }}
+                      >
+                        قص / تدوير ✂️
+                      </Button>
+                      <Button 
+                        variant="outlined" 
+                        color="error" 
+                        size="small"
+                        onClick={() => setSelectedImage(null)}
+                        sx={{ borderRadius: '8px', fontWeight: 'bold', fontFamily: '"Cairo", sans-serif' }}
+                      >
+                        حذف المرفق
+                      </Button>
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+
+              <Box className="col-span-1 md:col-span-12">
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={2}
+                  label="توجيهات ووصف المبرر والملاحظات"
+                  placeholder="مثال: صرف لدعم المزارعين بناء على الأمر الإداري رقم 25..."
+                  {...register('notes')}
+                />
+              </Box>
+            </Box>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, justifyContent: 'flex-start', gap: 2 }}>

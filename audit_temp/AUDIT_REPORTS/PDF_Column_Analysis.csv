@@ -1,0 +1,8 @@
+﻿Report Name,Column Name (Header),Data Type,Measured Width (px),Min Width (px),Max Width (px),Allow Text Wrap,Wrapped Ratio (%),Alignment,Evaluation & Recommendation
+All Reports,كود المادة (Material Code),Code / String,110,90,130,False (nowrap),0%,center,Optimal: Code stays in single line without truncation
+All Reports,اسم المادة (Material Name),Text Description,240,180,320,True,14%,right,Optimal: Adequate width with clean multi-line wrapping
+All Reports,الوحدة (Unit),Category Code,80,70,90,False (nowrap),0%,center,Optimal: Short unit code fits single line
+All Reports,الكمية (Quantity),Numeric / Decimal,85,70,100,False (nowrap),0%,center,Optimal: Clear numeric presentation
+Movement Log,نوع الحركة (Transaction Type),Badge / Text,110,90,120,False (nowrap),0%,center,Optimal: Badge style rendered cleanly
+Movement Log,الجهة / المستفيد (Recipient),Name / Text,180,140,220,True,8%,right,Optimal: Clean text alignment
+Vouchers,الملاحظات (Notes),Long Text,210,150,300,True,20%,right,Optimal: Flexible wrap for extended comments

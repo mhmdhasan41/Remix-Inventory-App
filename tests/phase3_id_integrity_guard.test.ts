@@ -6,8 +6,9 @@ import crypto from 'crypto';
 import { spawn } from 'child_process';
 import http from 'http';
 
-const EXPECTED_ENGINE_SOURCE_HASH = '7511d99b0d7ccb491b80d64d648ad7a9ab5fa9b8215ef2d4997cd0cf5aca67c3';
+const EXPECTED_ENGINE_SOURCE_HASH = 'de5bcfbe5a33ece817da0b3a41963be685a64336be0dfd4ef3673e7f716cf951';
 const ENGINE_SOURCE_PATH = path.resolve('src/utils/printHtml.ts');
+const TRANSACTIONS_SOURCE_PATH = path.resolve('src/pages/Transactions.tsx');
 const SERVER_READINESS_TIMEOUT_MS = 60_000;
 const PAGE_NAVIGATION_TIMEOUT_MS = 60_000;
 const MAX_VITE_LOG_CHARS = 12_000;
@@ -69,6 +70,28 @@ function runFixtureMaterializationTests(): void {
     { recordId: 'R1', row: ['ROW-2'] }
   ], 'duplicate recordId');
   expectFixtureFailure('fixture-row-shape', [{ recordId: 'R1', row: null as any }], 'row must be an array');
+}
+
+function runLiveAcceptanceSourceRegressionTests(): void {
+  const engineSource = fs.readFileSync(ENGINE_SOURCE_PATH, 'utf8');
+  const transactionsSource = fs.readFileSync(TRANSACTIONS_SOURCE_PATH, 'utf8');
+
+  const pageNumberReservation = 'min-height: 15px; line-height: 1.5; color: #64748b;">صفحة 0 من 0</div>';
+  if (!engineSource.includes(pageNumberReservation)) {
+    throw new Error('[live-acceptance] page-number height is not reserved before pagination');
+  }
+
+  const requiredVoucherIdentityMarkers = [
+    'recordIds1ForIds = activeList.map(wh => JSON.stringify([',
+    "recordIds1ForIds.push(JSON.stringify(['voucher_balance', txIdForIds, 'all_storehouses_total']))",
+    "JSON.stringify(['voucher_balance', txIdForIds, 'warehouse', stableStorehouseForId, 'before'])",
+    "JSON.stringify(['voucher_balance', txIdForIds, 'warehouse', stableStorehouseForId, 'after'])"
+  ];
+  for (const marker of requiredVoucherIdentityMarkers) {
+    if (!transactionsSource.includes(marker)) {
+      throw new Error(`[live-acceptance] missing voucher identity marker: ${marker}`);
+    }
+  }
 }
 
 function pollServerReadiness(
@@ -185,6 +208,8 @@ async function runGuardTests() {
   let executionSentinelPassed = false;
   let fixtureAssertionsPassed = false;
   let helperAssertionsPassed = false;
+  let liveAcceptanceSourceRegressionPassed = false;
+  let pageNumberRegressionPassed = false;
   let positiveControlPassed = false;
   const passedCorruptionCases = new Set<string>();
   const passedPreflightCases = new Set<string>();
@@ -203,6 +228,10 @@ async function runGuardTests() {
     if (engineSourceHash !== EXPECTED_ENGINE_SOURCE_HASH) {
       throw new Error(`Engine Source Hash mismatch! Expected ${EXPECTED_ENGINE_SOURCE_HASH} but got ${engineSourceHash}`);
     }
+
+    runLiveAcceptanceSourceRegressionTests();
+    liveAcceptanceSourceRegressionPassed = true;
+    console.log('Live acceptance source regressions passed.');
 
     runFixtureMaterializationTests();
     fixtureAssertionsPassed = true;
@@ -511,6 +540,48 @@ async function runGuardTests() {
        console.log('Positive Control PASSED.');
     }
 
+    const pageNumberFixtures: FixtureRecord[] = Array.from({ length: 59 }, (_, index) => ({
+      recordId: `OPENING-${String(index + 1).padStart(3, '0')}`,
+      row: [
+        `MAT-${String(1000 + index)}`,
+        index % 3 === 0 ? `اسم ومواصفات مادة مخزنية تفصيلية رقم ${index + 1}` : `صنف مخزني ${index + 1}`,
+        index % 2 === 0 ? 'أدوات ومعدات' : 'مواد',
+        'قطعة',
+        String((index % 9) + 1),
+        'مخزن خانيونس',
+        '٩/٨/٢٠٢٦',
+        index % 4 === 0 ? 'ملاحظات ومواصفات فنية معتمدة' : '--'
+      ]
+    }));
+    const pageNumberMaterialized = materializeFixtures('PageNumberReservation', pageNumberFixtures);
+    const pageNumberData = {
+      filename: 'PageNumberReservation.pdf',
+      title: 'سند توثيق الأرصدة الافتتاحية للمخزون التأسيسي',
+      organizationName: 'مكتب صحة البيئة - خان يونس',
+      departmentName: 'دائرة البنى التحتية والتخطيط والتطوير',
+      metaFields: [
+        { label: 'تصنيف التقرير وعائلته:', value: 'سند توثيق الأرصدة الافتتاحية للمخزون' },
+        { label: 'تعداد السجلات المدرجة:', value: '59 سجل حركي دفتري' }
+      ],
+      tables: [{
+        headers: ['كود الصنف', 'اسم ومواصفات المادة بالكامل', 'التصنيف', 'وحدة المعاملات', 'الرصيد الافتتاحي المعتمد', 'المستودع وموقع التخزين', 'تاريخ إقرار الرصيد', 'ملاحظات ومواصفات فنية'],
+        rows: pageNumberMaterialized.rows,
+        recordIds: pageNumberMaterialized.recordIds,
+        columnAlignments: ['center', 'center', 'center', 'center', 'center', 'center', 'center', 'center']
+      }]
+    };
+    const pageNumberResult = await runTestCase('PageNumberReservation', { case: null, printData: pageNumberData });
+    pageNumberRegressionPassed = pageNumberResult.testName === 'PageNumberReservation' &&
+      !pageNumberResult.error && pageNumberResult.pdfBlobCaptured && pageNumberResult.pdfHeaderValid &&
+      pageNumberResult.identityMapCaptured && pageNumberResult.dataRowsMapped &&
+      pageNumberResult.remainingIframes === 0 && pageNumberResult.hooksRestored;
+    if (!pageNumberRegressionPassed) {
+      console.error('Page-number reservation regression FAILED:', pageNumberResult);
+      allTestsPassed = false;
+    } else {
+      console.log('Page-number reservation regression PASSED.');
+    }
+
     // Corruptions A-D
     const runCorruptionCase = async (caseName: string, fixtures: FixtureRecord[][], errKeyword: string) => {
        const printData = {
@@ -631,7 +702,8 @@ async function runGuardTests() {
        tables: [{ headers: ['H1'], rows: [['R1'], ['R2']], recordIds: [' R1 ', 'R1'] }]
     }, 'تكرار في الهوية');
 
-    executionSentinelPassed = fixtureAssertionsPassed && helperAssertionsPassed && positiveControlPassed &&
+    executionSentinelPassed = fixtureAssertionsPassed && helperAssertionsPassed &&
+      liveAcceptanceSourceRegressionPassed && pageNumberRegressionPassed && positiveControlPassed &&
       passedCorruptionCases.size === expectedCorruptionCases.length &&
       expectedCorruptionCases.every((caseName) => passedCorruptionCases.has(caseName)) &&
       passedPreflightCases.size === expectedPreflightCases.length &&
@@ -641,6 +713,8 @@ async function runGuardTests() {
       console.error('Execution sentinel FAILED:', {
         fixtureAssertionsPassed,
         helperAssertionsPassed,
+        liveAcceptanceSourceRegressionPassed,
+        pageNumberRegressionPassed,
         positiveControlPassed,
         passedCorruptionCases: Array.from(passedCorruptionCases),
         passedPreflightCases: Array.from(passedPreflightCases)

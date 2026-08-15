@@ -11,7 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-const EXPECTED_ENGINE_SOURCE_HASH = '7511d99b0d7ccb491b80d64d648ad7a9ab5fa9b8215ef2d4997cd0cf5aca67c3';
+const EXPECTED_ENGINE_SOURCE_HASH = 'de5bcfbe5a33ece817da0b3a41963be685a64336be0dfd4ef3673e7f716cf951';
 
 const OUTPUT_DIR = path.resolve('phase2_real_integration_output');
 
@@ -215,7 +215,7 @@ async function runRealIntegrationTests() {
       await dialog.accept();
     });
 
-    await page.goto('http://localhost:3000', { waitUntil: 'domcontentloaded' });
+    await page.goto('http://127.0.0.1:3000', { waitUntil: 'domcontentloaded', timeout: 60_000 });
 
     // Setup PDF blob interception inside browser with strict PDF verification and Promise handling
     await page.evaluate(() => {

@@ -396,6 +396,13 @@ export default function Transactions() {
 
         const activeList = storehousesWithStock.length > 0 ? storehousesWithStock : (appSettings.storehouses.length > 0 ? appSettings.storehouses : ['المخزن الرئيسي']);
 
+        recordIds1ForIds = activeList.map(wh => JSON.stringify([
+          'voucher_balance',
+          txIdForIds,
+          'warehouse',
+          requireStableStringPart(wh, 'balanceWarehouse')
+        ]));
+
         balanceRows = activeList.map(wh => [
           wh,
           `${history.before[wh] ?? 0} ${itemUnit}`,
@@ -407,11 +414,17 @@ export default function Transactions() {
           `${item.displayStockBefore ?? history.totalBefore} ${itemUnit}`,
           `<span style="font-weight: bold; color: #0369a1">${item.displayStockAfter ?? history.totalAfter} ${itemUnit}</span>`
         ]);
+        recordIds1ForIds.push(JSON.stringify(['voucher_balance', txIdForIds, 'all_storehouses_total']));
 
         balanceRowBgColors = balanceRows.map((_, idx) => idx === balanceRows.length - 1 ? '#f1f5f9' : null);
       } else {
+        const stableStorehouseForId = requireStableStringPart(storehouseName, 'voucherStorehouse');
         balanceHeaders = ['بيان الرصيد والكميات', 'مقدار الرصيد الدفتري والميداني'];
         balanceAlignments = ['right', 'center'];
+        recordIds1ForIds = [
+          JSON.stringify(['voucher_balance', txIdForIds, 'warehouse', stableStorehouseForId, 'before']),
+          JSON.stringify(['voucher_balance', txIdForIds, 'warehouse', stableStorehouseForId, 'after'])
+        ];
         balanceRows = [
           [
             `الرصيد الدفتري المتوفر بالمستودع (${storehouseName}) قبل الحركة`,

@@ -2,11 +2,11 @@
   "case3": {
     "chosenT1RowCount": 17,
     "chosenHeaderExtraLines": 4,
-    "chosenRowPadPx": 40,
+    "chosenRowPadPx": 24,
     "chosenCandidate": {
       "t1RowCount": 17,
       "extraLines": 4,
-      "rowPadPx": 40,
+      "rowPadPx": 24,
       "exportErr": null,
       "pdfBlobCaptured": true,
       "remainingIframes": 0,
@@ -14,20 +14,20 @@
         "domPageCount": 2,
         "p1PadBottom": 30,
         "usableBottom": 1165,
-        "t1ContainerBottom": 988.875,
+        "t1ContainerBottom": 987.875,
         "t1MarginBottom": 20,
         "titleMarginTop": 0,
-        "firstRowTop": 1481.375,
+        "firstRowTop": 1480.375,
         "usableHeightPx": 1135,
-        "remainingPxOnPage1": 156.125,
+        "remainingPxOnPage1": 157.125,
         "table2PrefixPx": 155,
-        "firstRowPx": 57,
+        "firstRowPx": 41.125,
         "orphanTitleCount": 0,
         "emptyTableContainerCount": 0,
         "emptyPageCount": 0,
         "pageTexts": [
-          "\n      \n        \n          الشركة العامة للخدمات\n          إدارة الصيانة والمخازن\n        \n        \n          تاريخ التصدير: ١٥‏/٨‏/٢٠٢٦\n          وقت التصدير: ١:٤٥:١٠ ص\n          صفحة 1 من 2\n        \n      \n    \n          \n            جرد المستودع العام - الجداول المزدوجة\n          \n        نوع الجردنصف سنويالجدول الأول: المعدات الأوليّةمالبيانالحالةالكمية1C3_T1_R1_UNIQUE صنف معدات طبية رقم 1متوفر102C3_T1_R2_UNIQUE صنف معدات طبية رقم 2متوفر203C3_T1_R3_UNIQUE صنف معدات طبية رقم 3متوفر304C3_T1_R4_UNIQUE صنف معدات طبية رقم 4متوفر405C3_T1_R5_UNIQUE صنف معدات طبية رقم 5متوفر506C3_T1_R6_UNIQUE صنف معدات طبية رقم 6متوفر607C3_T1_R7_UNIQUE صنف معدات طبية رقم 7متوفر708C3_T1_R8_UNIQUE صنف معدات طبية رقم 8متوفر809C3_T1_R9_UNIQUE صنف معدات طبية رقم 9متوفر9010C3_T1_R10_UNIQUE صنف معدات طبية رقم 10متوفر10011C3_T1_R11_UNIQUE صنف معدات طبية رقم 11متوفر11012C3_T1_R12_UNIQUE صنف معدات طبية رقم 12متوفر12013C3_T1_R13_UNIQUE صنف معدات طبية رقم 13متوفر13014C3_T1_R14_UNIQUE صنف معدات طبية رقم 14متوفر14015C3_T1_R15_UNIQUE صنف معدات طبية رقم 15متوفر15016C3_T1_R16_UNIQUE صنف معدات طبية رقم 16متوفر16017C3_T1_R17_UNIQUE صنف معدات طبية رقم 17متوفر170",
-          "\n      \n        \n          الشركة العامة للخدمات\n          إدارة الصيانة والمخازن\n        \n        \n          تاريخ التصدير: ١٥‏/٨‏/٢٠٢٦\n          وقت التصدير: ١:٤٥:١٠ ص\n          صفحة 2 من 2\n        \n      \n    C3_T2_TITLE_UNIQUEC3_T2_HEADER_UNIQUEسطر إضافيسطر إضافيسطر إضافيسطر إضافيقطع الغيارالحالةالكمية1C3_T2_ROW1_UNIQUE C3_T2_R1_UNIQUE قطع غيار صيانة رقم 1تحت الطلب22C3_T2_R2_UNIQUE قطع غيار صيانة رقم 2تحت الطلب43C3_T2_R3_UNIQUE قطع غيار صيانة رقم 3تحت الطلب64C3_T2_R4_UNIQUE قطع غيار صيانة رقم 4تحت الطلب85C3_T2_R5_UNIQUE قطع غيار صيانة رقم 5تحت الطلب106C3_T2_R6_UNIQUE قطع غيار صيانة رقم 6تحت الطلب12"
+          "\n      \n        \n          الشركة العامة للخدمات\n          إدارة الصيانة والمخازن\n        \n        \n          تاريخ التصدير: ١٥‏/٨‏/٢٠٢٦\n          وقت التصدير: ١٠:٢٣:٤٤ م\n          صفحة 1 من 2\n        \n      \n    \n          \n            جرد المستودع العام - الجداول المزدوجة\n          \n        نوع الجردنصف سنويالجدول الأول: المعدات الأوليّةمالبيانالحالةالكمية1C3_T1_R1_UNIQUE صنف معدات طبية رقم 1متوفر102C3_T1_R2_UNIQUE صنف معدات طبية رقم 2متوفر203C3_T1_R3_UNIQUE صنف معدات طبية رقم 3متوفر304C3_T1_R4_UNIQUE صنف معدات طبية رقم 4متوفر405C3_T1_R5_UNIQUE صنف معدات طبية رقم 5متوفر506C3_T1_R6_UNIQUE صنف معدات طبية رقم 6متوفر607C3_T1_R7_UNIQUE صنف معدات طبية رقم 7متوفر708C3_T1_R8_UNIQUE صنف معدات طبية رقم 8متوفر809C3_T1_R9_UNIQUE صنف معدات طبية رقم 9متوفر9010C3_T1_R10_UNIQUE صنف معدات طبية رقم 10متوفر10011C3_T1_R11_UNIQUE صنف معدات طبية رقم 11متوفر11012C3_T1_R12_UNIQUE صنف معدات طبية رقم 12متوفر12013C3_T1_R13_UNIQUE صنف معدات طبية رقم 13متوفر13014C3_T1_R14_UNIQUE صنف معدات طبية رقم 14متوفر14015C3_T1_R15_UNIQUE صنف معدات طبية رقم 15متوفر15016C3_T1_R16_UNIQUE صنف معدات طبية رقم 16متوفر16017C3_T1_R17_UNIQUE صنف معدات طبية رقم 17متوفر170",
+          "\n      \n        \n          الشركة العامة للخدمات\n          إدارة الصيانة والمخازن\n        \n        \n          تاريخ التصدير: ١٥‏/٨‏/٢٠٢٦\n          وقت التصدير: ١٠:٢٣:٤٤ م\n          صفحة 2 من 2\n        \n      \n    C3_T2_TITLE_UNIQUEC3_T2_HEADER_UNIQUEسطر إضافيسطر إضافيسطر إضافيسطر إضافيقطع الغيارالحالةالكمية1C3_T2_ROW1_UNIQUE C3_T2_R1_UNIQUE قطع غيار صيانة رقم 1تحت الطلب22C3_T2_R2_UNIQUE قطع غيار صيانة رقم 2تحت الطلب43C3_T2_R3_UNIQUE قطع غيار صيانة رقم 3تحت الطلب64C3_T2_R4_UNIQUE قطع غيار صيانة رقم 4تحت الطلب85C3_T2_R5_UNIQUE قطع غيار صيانة رقم 5تحت الطلب106C3_T2_R6_UNIQUE قطع غيار صيانة رقم 6تحت الطلب12"
         ]
       },
       "geometrySatisfied": true,
@@ -96,34 +96,6 @@
         "t1RowCount": 17,
         "extraLines": 4,
         "rowPadPx": 24,
-        "exportErr": "خطأ في أبعاد الصفحة رقم 1: الارتفاع المستخدم (1138px) يتجاوز الحد القابل للطباعة (1135px). تم إيقاف التصدير.",
-        "pdfBlobCaptured": false,
-        "remainingIframes": 0,
-        "snapshot": {
-          "error": "Title element with token \"C3_T2_TITLE_UNIQUE\" missing on Page 2"
-        },
-        "geometrySatisfied": false,
-        "integrity": null,
-        "passed": false
-      },
-      {
-        "t1RowCount": 17,
-        "extraLines": 4,
-        "rowPadPx": 32,
-        "exportErr": "خطأ في أبعاد الصفحة رقم 1: الارتفاع المستخدم (1145px) يتجاوز الحد القابل للطباعة (1135px). تم إيقاف التصدير.",
-        "pdfBlobCaptured": false,
-        "remainingIframes": 0,
-        "snapshot": {
-          "error": "Title element with token \"C3_T2_TITLE_UNIQUE\" missing on Page 2"
-        },
-        "geometrySatisfied": false,
-        "integrity": null,
-        "passed": false
-      },
-      {
-        "t1RowCount": 17,
-        "extraLines": 4,
-        "rowPadPx": 40,
         "exportErr": null,
         "pdfBlobCaptured": true,
         "remainingIframes": 0,
@@ -131,20 +103,20 @@
           "domPageCount": 2,
           "p1PadBottom": 30,
           "usableBottom": 1165,
-          "t1ContainerBottom": 988.875,
+          "t1ContainerBottom": 987.875,
           "t1MarginBottom": 20,
           "titleMarginTop": 0,
-          "firstRowTop": 1481.375,
+          "firstRowTop": 1480.375,
           "usableHeightPx": 1135,
-          "remainingPxOnPage1": 156.125,
+          "remainingPxOnPage1": 157.125,
           "table2PrefixPx": 155,
-          "firstRowPx": 57,
+          "firstRowPx": 41.125,
           "orphanTitleCount": 0,
           "emptyTableContainerCount": 0,
           "emptyPageCount": 0,
           "pageTexts": [
-            "\n      \n        \n          الشركة العامة للخدمات\n          إدارة الصيانة والمخازن\n        \n        \n          تاريخ التصدير: ١٥‏/٨‏/٢٠٢٦\n          وقت التصدير: ١:٤٥:١٠ ص\n          صفحة 1 من 2\n        \n      \n    \n          \n            جرد المستودع العام - الجداول المزدوجة\n          \n        نوع الجردنصف سنويالجدول الأول: المعدات الأوليّةمالبيانالحالةالكمية1C3_T1_R1_UNIQUE صنف معدات طبية رقم 1متوفر102C3_T1_R2_UNIQUE صنف معدات طبية رقم 2متوفر203C3_T1_R3_UNIQUE صنف معدات طبية رقم 3متوفر304C3_T1_R4_UNIQUE صنف معدات طبية رقم 4متوفر405C3_T1_R5_UNIQUE صنف معدات طبية رقم 5متوفر506C3_T1_R6_UNIQUE صنف معدات طبية رقم 6متوفر607C3_T1_R7_UNIQUE صنف معدات طبية رقم 7متوفر708C3_T1_R8_UNIQUE صنف معدات طبية رقم 8متوفر809C3_T1_R9_UNIQUE صنف معدات طبية رقم 9متوفر9010C3_T1_R10_UNIQUE صنف معدات طبية رقم 10متوفر10011C3_T1_R11_UNIQUE صنف معدات طبية رقم 11متوفر11012C3_T1_R12_UNIQUE صنف معدات طبية رقم 12متوفر12013C3_T1_R13_UNIQUE صنف معدات طبية رقم 13متوفر13014C3_T1_R14_UNIQUE صنف معدات طبية رقم 14متوفر14015C3_T1_R15_UNIQUE صنف معدات طبية رقم 15متوفر15016C3_T1_R16_UNIQUE صنف معدات طبية رقم 16متوفر16017C3_T1_R17_UNIQUE صنف معدات طبية رقم 17متوفر170",
-            "\n      \n        \n          الشركة العامة للخدمات\n          إدارة الصيانة والمخازن\n        \n        \n          تاريخ التصدير: ١٥‏/٨‏/٢٠٢٦\n          وقت التصدير: ١:٤٥:١٠ ص\n          صفحة 2 من 2\n        \n      \n    C3_T2_TITLE_UNIQUEC3_T2_HEADER_UNIQUEسطر إضافيسطر إضافيسطر إضافيسطر إضافيقطع الغيارالحالةالكمية1C3_T2_ROW1_UNIQUE C3_T2_R1_UNIQUE قطع غيار صيانة رقم 1تحت الطلب22C3_T2_R2_UNIQUE قطع غيار صيانة رقم 2تحت الطلب43C3_T2_R3_UNIQUE قطع غيار صيانة رقم 3تحت الطلب64C3_T2_R4_UNIQUE قطع غيار صيانة رقم 4تحت الطلب85C3_T2_R5_UNIQUE قطع غيار صيانة رقم 5تحت الطلب106C3_T2_R6_UNIQUE قطع غيار صيانة رقم 6تحت الطلب12"
+            "\n      \n        \n          الشركة العامة للخدمات\n          إدارة الصيانة والمخازن\n        \n        \n          تاريخ التصدير: ١٥‏/٨‏/٢٠٢٦\n          وقت التصدير: ١٠:٢٣:٤٤ م\n          صفحة 1 من 2\n        \n      \n    \n          \n            جرد المستودع العام - الجداول المزدوجة\n          \n        نوع الجردنصف سنويالجدول الأول: المعدات الأوليّةمالبيانالحالةالكمية1C3_T1_R1_UNIQUE صنف معدات طبية رقم 1متوفر102C3_T1_R2_UNIQUE صنف معدات طبية رقم 2متوفر203C3_T1_R3_UNIQUE صنف معدات طبية رقم 3متوفر304C3_T1_R4_UNIQUE صنف معدات طبية رقم 4متوفر405C3_T1_R5_UNIQUE صنف معدات طبية رقم 5متوفر506C3_T1_R6_UNIQUE صنف معدات طبية رقم 6متوفر607C3_T1_R7_UNIQUE صنف معدات طبية رقم 7متوفر708C3_T1_R8_UNIQUE صنف معدات طبية رقم 8متوفر809C3_T1_R9_UNIQUE صنف معدات طبية رقم 9متوفر9010C3_T1_R10_UNIQUE صنف معدات طبية رقم 10متوفر10011C3_T1_R11_UNIQUE صنف معدات طبية رقم 11متوفر11012C3_T1_R12_UNIQUE صنف معدات طبية رقم 12متوفر12013C3_T1_R13_UNIQUE صنف معدات طبية رقم 13متوفر13014C3_T1_R14_UNIQUE صنف معدات طبية رقم 14متوفر14015C3_T1_R15_UNIQUE صنف معدات طبية رقم 15متوفر15016C3_T1_R16_UNIQUE صنف معدات طبية رقم 16متوفر16017C3_T1_R17_UNIQUE صنف معدات طبية رقم 17متوفر170",
+            "\n      \n        \n          الشركة العامة للخدمات\n          إدارة الصيانة والمخازن\n        \n        \n          تاريخ التصدير: ١٥‏/٨‏/٢٠٢٦\n          وقت التصدير: ١٠:٢٣:٤٤ م\n          صفحة 2 من 2\n        \n      \n    C3_T2_TITLE_UNIQUEC3_T2_HEADER_UNIQUEسطر إضافيسطر إضافيسطر إضافيسطر إضافيقطع الغيارالحالةالكمية1C3_T2_ROW1_UNIQUE C3_T2_R1_UNIQUE قطع غيار صيانة رقم 1تحت الطلب22C3_T2_R2_UNIQUE قطع غيار صيانة رقم 2تحت الطلب43C3_T2_R3_UNIQUE قطع غيار صيانة رقم 3تحت الطلب64C3_T2_R4_UNIQUE قطع غيار صيانة رقم 4تحت الطلب85C3_T2_R5_UNIQUE قطع غيار صيانة رقم 5تحت الطلب106C3_T2_R6_UNIQUE قطع غيار صيانة رقم 6تحت الطلب12"
           ]
         },
         "geometrySatisfied": true,
@@ -184,12 +156,12 @@
     "extractedPdfPageImageCount": 2,
     "p1PadBottom": 30,
     "usableBottom": 1165,
-    "t1ContainerBottom": 910.875,
+    "t1ContainerBottom": 909.875,
     "t1MarginBottom": 20,
     "titleMarginTop": 0,
-    "firstRowTop": 1415.375,
+    "firstRowTop": 1414.375,
     "usableHeightPx": 1135,
-    "remainingPxOnPage1": 234.125,
+    "remainingPxOnPage1": 235.125,
     "table2PrefixPx": 89,
     "firstRowPx": 303,
     "geometryConditionSatisfied": true,
@@ -221,8 +193,8 @@
   "overallPassed": true,
   "provenance": {
     "engineSourcePath": "C:\\Users\\mHmD\\Documents\\Codex\\2026-08-11\\new-chat-2\\work\\Remix-Inventory-App-agent-r3a-repair\\src\\utils\\printHtml.ts",
-    "engineSourceHash": "7511d99b0d7ccb491b80d64d648ad7a9ab5fa9b8215ef2d4997cd0cf5aca67c3",
+    "engineSourceHash": "de5bcfbe5a33ece817da0b3a41963be685a64336be0dfd4ef3673e7f716cf951",
     "integrationTestPath": "C:\\Users\\mHmD\\Documents\\Codex\\2026-08-11\\new-chat-2\\work\\Remix-Inventory-App-agent-r3a-repair\\tests\\run_real_integration_test.ts",
-    "integrationTestHash": "2eb23b9e06aee5e6cbf8eb86054e6ae0add955c5f3ad4781f8511d84e7885bdf"
+    "integrationTestHash": "3860b127d7e2e8c8e43812c0d57def0d3ba3dced18761ee5fbb1c99ffa5ef826"
   }
 }

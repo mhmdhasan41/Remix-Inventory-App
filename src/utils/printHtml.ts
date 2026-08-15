@@ -865,7 +865,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
         <div class="header-left">
           <div>تاريخ التصدير: ${dateStr}</div>
           <div>وقت التصدير: ${timeStr}</div>
-          <div class="page-num-placeholder" style="font-size: 10px; font-weight: bold; margin-top: 4px; color: #64748b;"></div>
+          <div class="page-num-placeholder" style="font-size: 10px; font-weight: bold; margin-top: 4px; min-height: 15px; line-height: 1.5; color: #64748b;">صفحة 0 من 0</div>
         </div>
       </div>
     `;

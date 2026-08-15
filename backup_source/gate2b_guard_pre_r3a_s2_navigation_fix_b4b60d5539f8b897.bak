@@ -9,7 +9,6 @@ import http from 'http';
 const EXPECTED_ENGINE_SOURCE_HASH = '7511d99b0d7ccb491b80d64d648ad7a9ab5fa9b8215ef2d4997cd0cf5aca67c3';
 const ENGINE_SOURCE_PATH = path.resolve('src/utils/printHtml.ts');
 const SERVER_READINESS_TIMEOUT_MS = 60_000;
-const PAGE_NAVIGATION_TIMEOUT_MS = 60_000;
 const MAX_VITE_LOG_CHARS = 12_000;
 
 function getFileHash(filePath: string): string {
@@ -250,11 +249,11 @@ async function runGuardTests() {
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
-    page.setDefaultNavigationTimeout(PAGE_NAVIGATION_TIMEOUT_MS);
+    page.setDefaultNavigationTimeout(15000);
     page.setDefaultTimeout(15000);
     await page.goto('http://127.0.0.1:4179', {
       waitUntil: 'domcontentloaded',
-      timeout: PAGE_NAVIGATION_TIMEOUT_MS
+      timeout: 15000
     });
 
     const runTestCase = async (testName: string, config: any) => {
@@ -302,17 +301,6 @@ async function runGuardTests() {
             return url;
           };
 
-          // rowIdentityMap is constructed by exportToPDF in the parent page realm,
-          // even though its keys are <tr> elements created inside the print iframe.
-          originalWeakMapSet = WeakMap.prototype.set;
-          WeakMap.prototype.set = function(key: any, val: any) {
-            if (key && key.tagName === 'TR' && val && typeof val === 'object' && 'recordId' in val && 'tableIndex' in val) {
-               capturedIdentityMap = this;
-               identityMapCaptured = true;
-            }
-            return originalWeakMapSet.call(this, key, val);
-          };
-
           originalAppendChild = Node.prototype.appendChild;
           Node.prototype.appendChild = function(node: any) {
             const result = originalAppendChild.call(this, node);
@@ -321,6 +309,15 @@ async function runGuardTests() {
               const contentWindow = iframe.contentWindow;
               if (!contentWindow) return result;
               capturedContentWindow = contentWindow;
+
+              originalWeakMapSet = contentWindow.WeakMap.prototype.set;
+              contentWindow.WeakMap.prototype.set = function(key: any, val: any) {
+                if (key && key.tagName === 'TR' && val && typeof val === 'object' && 'recordId' in val && 'tableIndex' in val) {
+                   capturedIdentityMap = this;
+                   identityMapCaptured = true;
+                }
+                return originalWeakMapSet.call(this, key, val);
+              };
 
               iframeOriginalQuerySelector = contentWindow.Element.prototype.querySelector;
               contentWindow.Element.prototype.querySelector = function(sel: any) {
@@ -428,15 +425,15 @@ async function runGuardTests() {
           } else {
              iframeQuerySelectorRestored = !iframeHookInstalled;
           }
-          if (originalWeakMapSet) {
+          if (iframeHookInstalled && capturedContentWindow && originalWeakMapSet) {
              try {
-                 WeakMap.prototype.set = originalWeakMapSet;
-                 weakMapRestored = (WeakMap.prototype.set === originalWeakMapSet);
+                 capturedContentWindow.WeakMap.prototype.set = originalWeakMapSet;
+                 weakMapRestored = (capturedContentWindow.WeakMap.prototype.set === originalWeakMapSet);
              } catch(e) {
                  weakMapRestored = false;
              }
           } else {
-             weakMapRestored = true;
+             weakMapRestored = !iframeHookInstalled;
           }
           hooksRestored = createObjectURLRestored && appendChildRestored && iframeQuerySelectorRestored && weakMapRestored;
         }

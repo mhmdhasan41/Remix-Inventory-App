@@ -302,17 +302,6 @@ async function runGuardTests() {
             return url;
           };
 
-          // rowIdentityMap is constructed by exportToPDF in the parent page realm,
-          // even though its keys are <tr> elements created inside the print iframe.
-          originalWeakMapSet = WeakMap.prototype.set;
-          WeakMap.prototype.set = function(key: any, val: any) {
-            if (key && key.tagName === 'TR' && val && typeof val === 'object' && 'recordId' in val && 'tableIndex' in val) {
-               capturedIdentityMap = this;
-               identityMapCaptured = true;
-            }
-            return originalWeakMapSet.call(this, key, val);
-          };
-
           originalAppendChild = Node.prototype.appendChild;
           Node.prototype.appendChild = function(node: any) {
             const result = originalAppendChild.call(this, node);
@@ -321,6 +310,15 @@ async function runGuardTests() {
               const contentWindow = iframe.contentWindow;
               if (!contentWindow) return result;
               capturedContentWindow = contentWindow;
+
+              originalWeakMapSet = contentWindow.WeakMap.prototype.set;
+              contentWindow.WeakMap.prototype.set = function(key: any, val: any) {
+                if (key && key.tagName === 'TR' && val && typeof val === 'object' && 'recordId' in val && 'tableIndex' in val) {
+                   capturedIdentityMap = this;
+                   identityMapCaptured = true;
+                }
+                return originalWeakMapSet.call(this, key, val);
+              };
 
               iframeOriginalQuerySelector = contentWindow.Element.prototype.querySelector;
               contentWindow.Element.prototype.querySelector = function(sel: any) {
@@ -428,15 +426,15 @@ async function runGuardTests() {
           } else {
              iframeQuerySelectorRestored = !iframeHookInstalled;
           }
-          if (originalWeakMapSet) {
+          if (iframeHookInstalled && capturedContentWindow && originalWeakMapSet) {
              try {
-                 WeakMap.prototype.set = originalWeakMapSet;
-                 weakMapRestored = (WeakMap.prototype.set === originalWeakMapSet);
+                 capturedContentWindow.WeakMap.prototype.set = originalWeakMapSet;
+                 weakMapRestored = (capturedContentWindow.WeakMap.prototype.set === originalWeakMapSet);
              } catch(e) {
                  weakMapRestored = false;
              }
           } else {
-             weakMapRestored = true;
+             weakMapRestored = !iframeHookInstalled;
           }
           hooksRestored = createObjectURLRestored && appendChildRestored && iframeQuerySelectorRestored && weakMapRestored;
         }

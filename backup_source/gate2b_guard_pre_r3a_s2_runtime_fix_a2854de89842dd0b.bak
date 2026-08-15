@@ -8,9 +8,6 @@ import http from 'http';
 
 const EXPECTED_ENGINE_SOURCE_HASH = '7511d99b0d7ccb491b80d64d648ad7a9ab5fa9b8215ef2d4997cd0cf5aca67c3';
 const ENGINE_SOURCE_PATH = path.resolve('src/utils/printHtml.ts');
-const SERVER_READINESS_TIMEOUT_MS = 60_000;
-const PAGE_NAVIGATION_TIMEOUT_MS = 60_000;
-const MAX_VITE_LOG_CHARS = 12_000;
 
 function getFileHash(filePath: string): string {
   const buffer = fs.readFileSync(filePath);
@@ -71,42 +68,21 @@ function runFixtureMaterializationTests(): void {
   expectFixtureFailure('fixture-row-shape', [{ recordId: 'R1', row: null as any }], 'row must be an array');
 }
 
-function pollServerReadiness(
-  url: string,
-  timeoutMs: number,
-  childProc: any,
-  getDiagnostics: () => string
-): Promise<void> {
+function pollServerReadiness(url: string, timeoutMs: number, childProc: any): Promise<void> {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
     const interval = 250;
     const requestTimeoutMs = 1000;
     let settled = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let onChildError: ((error: Error) => void) | undefined;
-    let onChildExit: ((code: number | null, signal: string | null) => void) | undefined;
 
     const finish = (error?: Error) => {
       if (settled) return;
       settled = true;
       if (retryTimer) clearTimeout(retryTimer);
-      if (onChildError) childProc?.removeListener('error', onChildError);
-      if (onChildExit) childProc?.removeListener('exit', onChildExit);
-      if (error) {
-        const diagnostics = getDiagnostics().trim();
-        reject(new Error(diagnostics ? `${error.message}\n${diagnostics}` : error.message));
-      }
+      if (error) reject(error);
       else resolve();
     };
-
-    onChildError = (error: Error) => {
-      finish(new Error(`Vite process error: ${error.message}`));
-    };
-    onChildExit = (code: number | null, signal: string | null) => {
-      finish(new Error(`Vite process exited before readiness (code=${String(code)}, signal=${String(signal)})`));
-    };
-    childProc?.once('error', onChildError);
-    childProc?.once('exit', onChildExit);
 
     const check = () => {
       if (settled) return;
@@ -209,52 +185,28 @@ async function runGuardTests() {
     console.log('Fixture materialization tests passed.');
 
     // Start Vite server
-    let viteLogBuffer = '';
-    const captureViteLog = (stream: 'stdout' | 'stderr', data: any) => {
-      const text = String(data);
-      viteLogBuffer = `${viteLogBuffer}[${stream}] ${text}`.slice(-MAX_VITE_LOG_CHARS);
-      const rendered = text.trimEnd();
-      if (!rendered) return;
-      if (stream === 'stderr') console.error(`Vite stderr: ${rendered}`);
-      else console.log(`Vite stdout: ${rendered}`);
-    };
-
     serverProcess = spawn(process.execPath, [
       path.resolve('node_modules/vite/bin/vite.js'),
-      '--port', '4179', '--strictPort', '--host', '127.0.0.1', '--clearScreen', 'false'
-    ], {
-      cwd: process.cwd(),
-      stdio: 'pipe',
-      env: { ...process.env, DISABLE_HMR: 'true' }
+      '--port', '4179', '--strictPort', '--host', '127.0.0.1'
+    ], { cwd: process.cwd(), stdio: 'pipe' });
+
+    serverProcess.stdout.on('data', () => {}); // Consume stdout
+    serverProcess.stderr.on('data', (data: any) => {
+      console.error(`Vite stderr: ${data}`);
     });
 
-    serverProcess.stdout.on('data', (data: any) => captureViteLog('stdout', data));
-    serverProcess.stderr.on('data', (data: any) => captureViteLog('stderr', data));
-
-    await pollServerReadiness(
-      'http://127.0.0.1:4179',
-      SERVER_READINESS_TIMEOUT_MS,
-      serverProcess,
-      () => [
-        `Vite executable: ${path.resolve('node_modules/vite/bin/vite.js')}`,
-        `Node executable: ${process.execPath}`,
-        `Vite pid: ${String(serverProcess?.pid ?? 'unavailable')}`,
-        `Vite exitCode: ${String(serverProcess?.exitCode)}`,
-        `Vite signalCode: ${String(serverProcess?.signalCode)}`,
-        `Recent Vite output:\n${viteLogBuffer.trim() || '<none captured>'}`
-      ].join('\n')
-    );
+    await pollServerReadiness('http://127.0.0.1:4179', 15000, serverProcess);
 
     browser = await puppeteer.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     const page = await browser.newPage();
-    page.setDefaultNavigationTimeout(PAGE_NAVIGATION_TIMEOUT_MS);
+    page.setDefaultNavigationTimeout(15000);
     page.setDefaultTimeout(15000);
     await page.goto('http://127.0.0.1:4179', {
       waitUntil: 'domcontentloaded',
-      timeout: PAGE_NAVIGATION_TIMEOUT_MS
+      timeout: 15000
     });
 
     const runTestCase = async (testName: string, config: any) => {
@@ -302,17 +254,6 @@ async function runGuardTests() {
             return url;
           };
 
-          // rowIdentityMap is constructed by exportToPDF in the parent page realm,
-          // even though its keys are <tr> elements created inside the print iframe.
-          originalWeakMapSet = WeakMap.prototype.set;
-          WeakMap.prototype.set = function(key: any, val: any) {
-            if (key && key.tagName === 'TR' && val && typeof val === 'object' && 'recordId' in val && 'tableIndex' in val) {
-               capturedIdentityMap = this;
-               identityMapCaptured = true;
-            }
-            return originalWeakMapSet.call(this, key, val);
-          };
-
           originalAppendChild = Node.prototype.appendChild;
           Node.prototype.appendChild = function(node: any) {
             const result = originalAppendChild.call(this, node);
@@ -321,6 +262,15 @@ async function runGuardTests() {
               const contentWindow = iframe.contentWindow;
               if (!contentWindow) return result;
               capturedContentWindow = contentWindow;
+
+              originalWeakMapSet = contentWindow.WeakMap.prototype.set;
+              contentWindow.WeakMap.prototype.set = function(key: any, val: any) {
+                if (key && key.tagName === 'TR' && val && typeof val === 'object' && 'recordId' in val && 'tableIndex' in val) {
+                   capturedIdentityMap = this;
+                   identityMapCaptured = true;
+                }
+                return originalWeakMapSet.call(this, key, val);
+              };
 
               iframeOriginalQuerySelector = contentWindow.Element.prototype.querySelector;
               contentWindow.Element.prototype.querySelector = function(sel: any) {
@@ -428,15 +378,15 @@ async function runGuardTests() {
           } else {
              iframeQuerySelectorRestored = !iframeHookInstalled;
           }
-          if (originalWeakMapSet) {
+          if (iframeHookInstalled && capturedContentWindow && originalWeakMapSet) {
              try {
-                 WeakMap.prototype.set = originalWeakMapSet;
-                 weakMapRestored = (WeakMap.prototype.set === originalWeakMapSet);
+                 capturedContentWindow.WeakMap.prototype.set = originalWeakMapSet;
+                 weakMapRestored = (capturedContentWindow.WeakMap.prototype.set === originalWeakMapSet);
              } catch(e) {
                  weakMapRestored = false;
              }
           } else {
-             weakMapRestored = true;
+             weakMapRestored = !iframeHookInstalled;
           }
           hooksRestored = createObjectURLRestored && appendChildRestored && iframeQuerySelectorRestored && weakMapRestored;
         }

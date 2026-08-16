@@ -466,16 +466,27 @@ export function printHtml(data: PrintData) {
   // Remove the iframe from DOM after print dialog is closed
   setTimeout(() => {
     document.body.removeChild(iframe);
-  }, 30000); // 30 seconds is standard to let printer run
+  }, IFRAME_REMOVE_TIMEOUT_MS); // allow time for print dialog to complete
 }
+
+const DEFAULT_PAGE_WIDTH_PORTRAIT = 820;
+const DEFAULT_PAGE_HEIGHT_PORTRAIT = 1195;
+const DEFAULT_PAGE_WIDTH_LANDSCAPE = 1120;
+const DEFAULT_PAGE_HEIGHT_LANDSCAPE = 768;
+const PAGE_PADDING_PX = 30;
+const IFRAME_REMOVE_TIMEOUT_MS = 30000;
+const FONT_LOAD_WAIT_SHORT_MS = 100;
+const FONT_LOAD_WAIT_LONG_MS = 300;
+const HTML2CANVAS_SCALE = 2.2;
+const JPEG_QUALITY = 0.95;
 
 export async function exportToPDF(data: PrintData & { filename: string; orientation?: 'portrait' | 'landscape' }) {
   const isLandscape = data.orientation === 'landscape';
   
   // 1. Unify page dimensions between CSS, html2canvas, and jsPDF (A4).
-  const PAGE_WIDTH = isLandscape ? 1120 : 820;
+  const PAGE_WIDTH = isLandscape ? DEFAULT_PAGE_WIDTH_LANDSCAPE : DEFAULT_PAGE_WIDTH_PORTRAIT;
   // A4 ratio for print area with 10mm margins
-  const PAGE_HEIGHT = isLandscape ? 768 : 1195;
+  const PAGE_HEIGHT = isLandscape ? DEFAULT_PAGE_HEIGHT_LANDSCAPE : DEFAULT_PAGE_HEIGHT_PORTRAIT;
   // Preflight validation
   const sourceRecordIds: string[][] = [];
   if (!Array.isArray(data.tables)) throw new Error('data.tables is missing or invalid');
@@ -785,11 +796,11 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
   try {
 
   // Wait for fonts and styles to load
-  await new Promise(r => setTimeout(r, 100)); // wait for DOM parsing
+  await new Promise(r => setTimeout(r, FONT_LOAD_WAIT_SHORT_MS)); // wait for DOM parsing
   if (iframe.contentWindow && iframe.contentWindow.document.fonts) {
     await iframe.contentWindow.document.fonts.ready;
   }
-  await new Promise(r => setTimeout(r, 300)); // wait for rendering
+  await new Promise(r => setTimeout(r, FONT_LOAD_WAIT_LONG_MS)); // wait for rendering
 
   const measureContainer = idoc.getElementById('measure-container') as HTMLElement;
   const pagesContainer = idoc.getElementById('pages-container') as HTMLElement;
@@ -843,7 +854,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
   // Available height per page
   // .pdf-page has 30px padding. box-sizing is border-box.
   // The usable height inside .pdf-page is PAGE_HEIGHT - 60.
-  const USABLE_HEIGHT = PAGE_HEIGHT - 60;
+  const USABLE_HEIGHT = PAGE_HEIGHT - (PAGE_PADDING_PX * 2);
   
   const createNewPage = () => {
     currentPageNum++;
@@ -1257,13 +1268,13 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
       const pageEl = allPages[i];
       const canvas = await html2canvas(pageEl, {
         window: iframe.contentWindow as unknown as Window,
-        scale: 2.2,
+        scale: HTML2CANVAS_SCALE,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff'
       } as any);
 
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      const imgData = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
       let finalPrintWidth = printWidth;
       let finalPrintHeight = (canvas.height * printWidth) / canvas.width;
       

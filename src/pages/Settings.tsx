@@ -982,7 +982,7 @@ export default function Settings() {
       const backupData = {
         materials: JSON.parse(localStorage.getItem('remix_materials_v1') || '[]'),
         transactions: JSON.parse(localStorage.getItem('remix_transactions_v1') || '[]'),
-        users: JSON.parse(localStorage.getItem('remix_users_v1') || '[]').map((u: any) => { delete u.password; return u; }),
+        users: JSON.parse(localStorage.getItem('remix_users_v1') || '[]').map(({ password, ...u }: any) => u),
         settings: JSON.parse(localStorage.getItem('remix_settings_v1') || '{}'),
         auditLogs: JSON.parse(localStorage.getItem('remix_audit_logs_v1') || '[]'),
         generatorLogs: JSON.parse(localStorage.getItem('remix_generator_logs_v1') || '[]'),
@@ -1062,7 +1062,7 @@ export default function Settings() {
       const backupData = {
         materials,
         transactions,
-        users: users.map(u => { delete (u as any).password; return u; }),
+        users: users.map(({ password, ...u }: any) => u),
         settings: localSettings,
         auditLogs,
         generatorLogs,

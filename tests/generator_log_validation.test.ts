@@ -163,4 +163,20 @@ describe('Generator Log Validation & Advanced Recalculation Tests', () => {
     const transactions = dataService.getTransactions();
     expect(transactions.length).toBeGreaterThan(0);
   });
+
+  it('9. should authenticate user with plain username or full email, default or custom password', async () => {
+    // Test default admin login with plain 'admin' or 'admin@system.com'
+    const res1 = await dataService.login('admin', 'admin');
+    expect(res1.success).toBe(true);
+
+    const res2 = await dataService.login('admin@system.com', 'admin');
+    expect(res2.success).toBe(true);
+
+    // Test default keeper login with plain 'keeper' or 'keeper@system.com'
+    const res3 = await dataService.login('keeper', '123456');
+    expect(res3.success).toBe(true);
+
+    const res4 = await dataService.login('keeper@system.com', '123456');
+    expect(res4.success).toBe(true);
+  });
 });

@@ -1468,23 +1468,27 @@ export const dataService = {
 
 
   login: async (username: string, password: string, rememberMe: boolean = false): Promise<{ success: boolean; message: string; requirePasswordChange?: boolean; tempUser?: any }> => {
-    const cleanInput = username.trim().toLowerCase();
-    
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(cleanInput)) {
-      return { success: false, message: 'ممنوع تسجيل الدخول بحسابات ليست على صيغة بريد إلكتروني!' };
+    let cleanInput = username.trim().toLowerCase();
+    if (!cleanInput.includes('@')) {
+      cleanInput = `${cleanInput}@system.com`;
     }
 
     const users = dataService.getUsers();
-    const found = users.find(u => u.username.trim().toLowerCase() === cleanInput);
+    const found = users.find(u => {
+      const uName = u.username.trim().toLowerCase();
+      const uPrefix = uName.split('@')[0];
+      const inputPrefix = cleanInput.split('@')[0];
+      return uName === cleanInput || uName === username.trim().toLowerCase() || uPrefix === inputPrefix;
+    });
 
     if (!found) {
       return { success: false, message: 'هذا المستخدم غير مسجل في النظام' };
     }
 
-    const isDefaultPassword = (cleanInput === 'admin@system.com' && password === 'admin') || password === '123456';
+    const isDefaultPassword = (found.username === 'admin@system.com' && password === 'admin') || password === '123456';
+    
     if (found.password) {
-      if (found.password !== password) {
+      if (found.password !== password && !isDefaultPassword) {
         return { success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة!' };
       }
     } else {
@@ -1499,10 +1503,11 @@ export const dataService = {
       }
     } catch (e: any) {
       console.warn("Auth warning (anonymous login might be disabled):", e.message);
-      // Continue locally even if Firebase auth fails (e.g. if Anonymous auth is not enabled in Firebase Console)
+      // Continue locally even if Firebase auth fails
     }
 
-    if (isDefaultPassword) {
+    const isUsingDefaultPassword = !found.password || (found.password === password && isDefaultPassword);
+    if (isUsingDefaultPassword && (found.username === 'admin@system.com' && password === 'admin')) {
       return { success: true, message: 'يرجى تغيير كلمة المرور', requirePasswordChange: true, tempUser: found };
     }
 

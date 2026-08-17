@@ -463,10 +463,20 @@ export function printHtml(data: PrintData) {
   doc.write(htmlContent);
   doc.close();
 
+  // Focus and trigger window.print on the iframe
+  setTimeout(() => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } catch (_) {}
+  }, 250);
+
   // Remove the iframe from DOM after print dialog is closed
   setTimeout(() => {
-    document.body.removeChild(iframe);
-  }, IFRAME_REMOVE_TIMEOUT_MS); // allow time for print dialog to complete
+    if (iframe.parentNode) {
+      iframe.parentNode.removeChild(iframe);
+    }
+  }, 60000); // 60 seconds timeout to allow print dialog to complete
 }
 
 const DEFAULT_PAGE_WIDTH_PORTRAIT = 820;

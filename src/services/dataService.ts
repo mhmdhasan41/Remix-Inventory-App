@@ -1834,7 +1834,12 @@ export const dataService = {
       for (const u of users) {
         await saveDocWithOCC('users', u.id, u);
       }
-      
+
+      // 6. Generator Logs
+      const generatorLogs = dataService.getGeneratorLogs();
+      for (const g of generatorLogs) {
+        await saveDocWithOCC('generator_logs', g.id, g);
+      }
 
       return { success: true, message: 'تم رفع كافة البيانات المحلية ومزامنتها على السحابة بنجاح!' };
     } catch (err: any) {
@@ -1853,8 +1858,7 @@ export const dataService = {
       const isCloudSync = isFirebaseAvailable && settings.cloudSyncEnabled;
 
       if (isCloudSync) {
-
-        const collectionsToClear = ['materials', 'transactions', 'audit_logs', 'users'];
+        const collectionsToClear = ['materials', 'transactions', 'audit_logs', 'users', 'generator_logs'];
         for (const colName of collectionsToClear) {
           try {
             const querySnapshot = await getDocs(collection(db, colName));
@@ -1868,7 +1872,6 @@ export const dataService = {
           }
         }
 
-
         for (const m of parsed.materials) {
           await setDoc(doc(db, 'materials', m.id), cleanUndefined(m));
         }
@@ -1881,6 +1884,11 @@ export const dataService = {
         if (parsed.auditLogs) {
           for (const l of parsed.auditLogs) {
             await setDoc(doc(db, 'audit_logs', l.id), cleanUndefined(l));
+          }
+        }
+        if (parsed.generatorLogs && Array.isArray(parsed.generatorLogs)) {
+          for (const g of parsed.generatorLogs) {
+            await setDoc(doc(db, 'generator_logs', g.id), cleanUndefined(g));
           }
         }
         if (parsed.settings) {
@@ -1897,6 +1905,9 @@ export const dataService = {
       }
       if (parsed.auditLogs) {
         localStorage.setItem('remix_audit_logs_v1', JSON.stringify(parsed.auditLogs));
+      }
+      if (parsed.generatorLogs && Array.isArray(parsed.generatorLogs)) {
+        localStorage.setItem(STORAGE_KEYS.GENERATOR_LOGS, JSON.stringify(parsed.generatorLogs));
       }
 
       dataService.logAudit('استعادة نسخة احتياطية', 'تم استيراد واستعادة قاعدة بيانات مخزنية ومصفوفات صلاحيات كاملة من منفذ خارجي يدوي عاجل', 'إعدادات');
@@ -2062,30 +2073,43 @@ export const dataService = {
   getLatestGeneratorLog: (): GeneratorLogEntry | undefined => {
     const logs = dataService.getGeneratorLogs();
     if (logs.length === 0) return undefined;
-    return logs.reduce((latest, current) => {
-      if (current.date > latest.date) return current;
-      return latest;
-    }, logs[0]);
+    return logs[logs.length - 1]; // Already sorted by date ascending in getGeneratorLogs
   },
 
-  saveGeneratorLog: (entry: Partial<GeneratorLogEntry> & { date: string; currentReading: number; previousReading: number }): GeneratorLogEntry => {
-    const logs = dataService.getGeneratorLogs();
-    const existingIndex = entry.id ? logs.findIndex(l => l.id === entry.id) : -1;
+  recalculateGeneratorChain: (inputLogs: GeneratorLogEntry[]): GeneratorLogEntry[] => {
+    const sorted = [...inputLogs].sort((a, b) => a.date.localeCompare(b.date));
+    const result: GeneratorLogEntry[] = [];
 
-    // Validate duplicate date (if new or changing date)
-    const duplicateDate = logs.find(l => l.date === entry.date && l.id !== entry.id);
-    if (duplicateDate) {
+    for (let i = 0; i < sorted.length; i++) {
+      const current = { ...sorted[i] };
+      if (i === 0) {
+        // First record keeps its previousReading (either manual if system started empty, or 0)
+        current.operatingHours = Number((current.currentReading - current.previousReading).toFixed(2));
+      } else {
+        const prev = result[i - 1];
+        current.previousReading = prev.currentReading;
+        current.operatingHours = Number((current.currentReading - current.previousReading).toFixed(2));
+      }
+
+      if (current.currentReading < current.previousReading) {
+        throw new Error(`INVALID_SEQUENCE:${current.date}:${current.currentReading}:${current.previousReading}`);
+      }
+      result.push(current);
+    }
+    return result;
+  },
+
+  simulateSaveGeneratorLog: (
+    entry: Partial<GeneratorLogEntry> & { date: string; currentReading: number; previousReading?: number }
+  ): GeneratorLogSimulationResult => {
+    const logs = dataService.getGeneratorLogs();
+    const isEditing = Boolean(entry.id && logs.some((l) => l.id === entry.id));
+
+    // Duplicate date check
+    const duplicate = logs.find((l) => l.date === entry.date && l.id !== entry.id);
+    if (duplicate) {
       throw new Error('DUPLICATE_DATE_EXISTS');
     }
-
-    if (entry.currentReading < entry.previousReading) {
-      throw new Error('CURRENT_READING_LESS_THAN_PREVIOUS');
-    }
-
-    const now = new Date().toISOString();
-    const operatingHours = Number((entry.currentReading - entry.previousReading).toFixed(2));
-    const currentUser = dataService.getCurrentUser();
-    const createdBy = entry.createdBy || currentUser?.fullName || currentUser?.username || 'مستخدم النظام';
 
     const getDayName = (dStr: string) => {
       const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
@@ -2093,60 +2117,197 @@ export const dataService = {
       return days[dt.getDay()] || '';
     };
 
-    let savedLog: GeneratorLogEntry;
-    if (existingIndex !== -1) {
-      savedLog = {
-        ...logs[existingIndex],
-        ...entry,
-        dayName: entry.dayName || getDayName(entry.date),
-        operatingHours,
-        updatedAt: now,
-      };
-      logs[existingIndex] = savedLog;
-      dataService.logAudit('تعديل سجل المولد', `تم تعديل قراءة سجل المولد لتاريخ: ${savedLog.date} (${savedLog.operatingHours} ساعة)`, 'مولد');
+    const now = new Date().toISOString();
+    const currentUser = dataService.getCurrentUser();
+    const createdBy = entry.createdBy || currentUser?.fullName || currentUser?.username || 'مستخدم النظام';
+
+    let candidateLogs: GeneratorLogEntry[] = [];
+    let targetId = entry.id || `gen-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+
+    if (isEditing) {
+      candidateLogs = logs.map((l) => {
+        if (l.id === entry.id) {
+          const prevReading = entry.previousReading !== undefined ? entry.previousReading : l.previousReading;
+          return {
+            ...l,
+            ...entry,
+            date: entry.date,
+            dayName: entry.dayName || getDayName(entry.date),
+            previousReading: prevReading,
+            currentReading: entry.currentReading,
+            operatingHours: Number((entry.currentReading - prevReading).toFixed(2)),
+            updatedAt: now,
+          };
+        }
+        return l;
+      });
     } else {
-      savedLog = {
-        id: entry.id || `gen-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      // Determine initial previousReading if adding
+      let initialPrevReading = entry.previousReading ?? 0;
+      const sortedBefore = logs.filter((l) => l.date < entry.date).sort((a, b) => a.date.localeCompare(b.date));
+      if (logs.length > 0) {
+        if (sortedBefore.length > 0) {
+          initialPrevReading = sortedBefore[sortedBefore.length - 1].currentReading;
+        } else {
+          // Inserting before all existing logs
+          initialPrevReading = entry.previousReading ?? 0;
+        }
+      }
+
+      const newLog: GeneratorLogEntry = {
+        id: targetId,
         date: entry.date,
         dayName: entry.dayName || getDayName(entry.date),
-        previousReading: entry.previousReading,
+        previousReading: initialPrevReading,
         currentReading: entry.currentReading,
-        operatingHours,
+        operatingHours: Number((entry.currentReading - initialPrevReading).toFixed(2)),
         notes: entry.notes || '',
         createdAt: now,
         updatedAt: now,
         createdBy,
       };
-      logs.push(savedLog);
-      dataService.logAudit('إضافة سجل المولد', `تم تسجيل قراءة المولد لتاريخ: ${savedLog.date} (${savedLog.operatingHours} ساعة)`, 'مولد');
+      candidateLogs = [...logs, newLog];
     }
 
-    localStorage.setItem(STORAGE_KEYS.GENERATOR_LOGS, JSON.stringify(logs));
+    // Run recalculation chain
+    const proposedLogs = dataService.recalculateGeneratorChain(candidateLogs);
+
+    // Compute Impact
+    const oldLogsMap = new Map(logs.map((l) => [l.id, l]));
+    const impactedItems: any[] = [];
+
+    proposedLogs.forEach((newLog) => {
+      const oldLog = oldLogsMap.get(newLog.id);
+      if (!oldLog) {
+        // Newly added log
+        impactedItems.push({
+          id: newLog.id,
+          date: newLog.date,
+          dayName: newLog.dayName,
+          oldPreviousReading: 0,
+          newPreviousReading: newLog.previousReading,
+          oldCurrentReading: 0,
+          newCurrentReading: newLog.currentReading,
+          oldOperatingHours: 0,
+          newOperatingHours: newLog.operatingHours,
+          isNew: true,
+        });
+      } else if (
+        oldLog.previousReading !== newLog.previousReading ||
+        oldLog.currentReading !== newLog.currentReading ||
+        oldLog.operatingHours !== newLog.operatingHours ||
+        oldLog.date !== newLog.date
+      ) {
+        impactedItems.push({
+          id: newLog.id,
+          date: newLog.date,
+          dayName: newLog.dayName,
+          oldPreviousReading: oldLog.previousReading,
+          newPreviousReading: newLog.previousReading,
+          oldCurrentReading: oldLog.currentReading,
+          newCurrentReading: newLog.currentReading,
+          oldOperatingHours: oldLog.operatingHours,
+          newOperatingHours: newLog.operatingHours,
+          isNew: false,
+        });
+      }
+    });
+
+    const lastAffected = impactedItems.length > 0 ? impactedItems[impactedItems.length - 1].date : undefined;
+
+    return {
+      actionType: isEditing ? 'edit_old' : (logs.some((l) => l.date > entry.date) ? 'add_old' : 'normal_save'),
+      affectedCount: impactedItems.length,
+      lastAffectedRecordDate: lastAffected,
+      impactedItems,
+      proposedLogs,
+    };
+  },
+
+  simulateDeleteGeneratorLog: (id: string): GeneratorLogSimulationResult => {
+    const logs = dataService.getGeneratorLogs();
+    const target = logs.find((l) => l.id === id);
+    if (!target) {
+      throw new Error('RECORD_NOT_FOUND');
+    }
+
+    const candidateLogs = logs.filter((l) => l.id !== id);
+    const proposedLogs = candidateLogs.length > 0 ? dataService.recalculateGeneratorChain(candidateLogs) : [];
+
+    const oldLogsMap = new Map(logs.map((l) => [l.id, l]));
+    const impactedItems: any[] = [];
+
+    proposedLogs.forEach((newLog) => {
+      const oldLog = oldLogsMap.get(newLog.id);
+      if (
+        oldLog &&
+        (oldLog.previousReading !== newLog.previousReading ||
+          oldLog.currentReading !== newLog.currentReading ||
+          oldLog.operatingHours !== newLog.operatingHours)
+      ) {
+        impactedItems.push({
+          id: newLog.id,
+          date: newLog.date,
+          dayName: newLog.dayName,
+          oldPreviousReading: oldLog.previousReading,
+          newPreviousReading: newLog.previousReading,
+          oldCurrentReading: oldLog.currentReading,
+          newCurrentReading: newLog.currentReading,
+          oldOperatingHours: oldLog.operatingHours,
+          newOperatingHours: newLog.operatingHours,
+          isNew: false,
+        });
+      }
+    });
+
+    const lastAffected = impactedItems.length > 0 ? impactedItems[impactedItems.length - 1].date : undefined;
+
+    return {
+      actionType: 'delete',
+      affectedCount: impactedItems.length + 1, // Including deleted target
+      lastAffectedRecordDate: lastAffected,
+      impactedItems,
+      proposedLogs,
+    };
+  },
+
+  commitGeneratorLogs: (logs: GeneratorLogEntry[], auditActionMessage?: string) => {
+    const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
+    localStorage.setItem(STORAGE_KEYS.GENERATOR_LOGS, JSON.stringify(sorted));
 
     const settings = dataService.getSettings();
     if (isFirebaseAvailable && settings.cloudSyncEnabled) {
-      setDoc(doc(db, 'generator_logs', savedLog.id), cleanUndefined(savedLog))
-        .catch(() => {});
+      sorted.forEach((savedLog) => {
+        setDoc(doc(db, 'generator_logs', savedLog.id), cleanUndefined(savedLog)).catch(() => {});
+      });
+    }
+
+    if (auditActionMessage) {
+      dataService.logAudit('تحديث سجلات المولد', auditActionMessage, 'مولد');
     }
     dataService.recordLocalWrite();
-    return savedLog;
+    dataService.notify();
+  },
+
+  saveGeneratorLog: (entry: Partial<GeneratorLogEntry> & { date: string; currentReading: number; previousReading?: number }): GeneratorLogEntry => {
+    const sim = dataService.simulateSaveGeneratorLog(entry);
+    dataService.commitGeneratorLogs(
+      sim.proposedLogs,
+      `تم حفظ/تحديث سجل المولد بتاريخ ${entry.date} مع إعادة حساب ${sim.affectedCount} سجل متأثر`
+    );
+    return sim.proposedLogs.find((l) => l.date === entry.date) || sim.proposedLogs[sim.proposedLogs.length - 1];
   },
 
   deleteGeneratorLog: (id: string) => {
-    let logs = dataService.getGeneratorLogs();
-    const target = logs.find(l => l.id === id);
-    if (!target) return;
-
-    logs = logs.filter(l => l.id !== id);
-    localStorage.setItem(STORAGE_KEYS.GENERATOR_LOGS, JSON.stringify(logs));
-
-    dataService.logAudit('حذف سجل المولد', `تم حذف قراءة سجل المولد بتاريخ: ${target.date}`, 'مولد');
-
+    const sim = dataService.simulateDeleteGeneratorLog(id);
+    dataService.commitGeneratorLogs(
+      sim.proposedLogs,
+      `تم حذف سجل المولد وإعادة حساب ${sim.affectedCount} سجل متأثر`
+    );
     const settings = dataService.getSettings();
     if (isFirebaseAvailable && settings.cloudSyncEnabled) {
       deleteDoc(doc(db, 'generator_logs', id)).catch(() => {});
     }
-    dataService.recordLocalWrite();
   },
 };
 

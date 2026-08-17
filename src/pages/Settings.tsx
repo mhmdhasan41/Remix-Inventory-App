@@ -985,6 +985,7 @@ export default function Settings() {
         users: JSON.parse(localStorage.getItem('remix_users_v1') || '[]').map((u: any) => { delete u.password; return u; }),
         settings: JSON.parse(localStorage.getItem('remix_settings_v1') || '{}'),
         auditLogs: JSON.parse(localStorage.getItem('remix_audit_logs_v1') || '[]'),
+        generatorLogs: JSON.parse(localStorage.getItem('remix_generator_logs_v1') || '[]'),
         backupVersion: '1.0',
         exportedAt: new Date().toISOString()
       };
@@ -1056,6 +1057,7 @@ export default function Settings() {
       const users = JSON.parse(localStorage.getItem('remix_users_v1') || '[]');
       const localSettings = JSON.parse(localStorage.getItem('remix_settings_v1') || '{}');
       const auditLogs = JSON.parse(localStorage.getItem('remix_audit_logs_v1') || '[]');
+      const generatorLogs = JSON.parse(localStorage.getItem('remix_generator_logs_v1') || '[]');
 
       const backupData = {
         materials,
@@ -1063,6 +1065,7 @@ export default function Settings() {
         users: users.map(u => { delete (u as any).password; return u; }),
         settings: localSettings,
         auditLogs,
+        generatorLogs,
         backupVersion: '1.0',
         exportedAt: new Date().toISOString()
       };
@@ -1168,8 +1171,39 @@ export default function Settings() {
         row.height = 22;
       });
 
+      // Sheet 4: Generator Logs
+      const genSheet = workbook.addWorksheet('سجل تشغيل المولد', {
+        views: [{ showGridLines: true, rightToLeft: true }]
+      });
+      genSheet.addRow([settings.organizationName || 'الأونروا - وكالة الغوث']).font = { name: fontName, size: 12, bold: true, color: { argb: '007AB7' } };
+      genSheet.addRow(['سجل قراءات وساعات تشغيل العداد التراكمي للمولد']).font = { name: fontName, size: 14, bold: true, color: { argb: '0F172A' } };
+      genSheet.addRow([`تاريخ الإصدار والنسخ السحابي: ${new Date().toLocaleDateString('ar-EG')} ${new Date().toLocaleTimeString('ar-EG')}`]).font = { name: fontName, size: 10, color: { argb: '475569' } };
+      genSheet.addRow([]);
+
+      const genHeaders = ['التاريخ', 'اليوم', 'القراءة السابقة', 'القراءة الحالية', 'ساعات التشغيل', 'الملاحظات', 'المُدخل'];
+      const genHeaderRow = genSheet.addRow(genHeaders);
+      genHeaderRow.height = 26;
+      genHeaderRow.eachCell((cell) => {
+        cell.font = { name: fontName, size: 11, bold: true, color: { argb: 'FFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0284C7' } };
+        cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      });
+
+      generatorLogs.forEach((g: any) => {
+        const row = genSheet.addRow([
+          g.date || '',
+          g.dayName || '',
+          Number(g.previousReading) || 0,
+          Number(g.currentReading) || 0,
+          Number(g.operatingHours) || 0,
+          g.notes || '-',
+          g.createdBy || ''
+        ]);
+        row.height = 22;
+      });
+
       // Auto-fit Column Widths across worksheets
-      [matSheet, txSheet, auditSheet].forEach((ws) => {
+      [matSheet, txSheet, auditSheet, genSheet].forEach((ws) => {
         ws.columns.forEach((column: any) => {
           let maxLen = 12;
           column.eachCell({ includeEmpty: true }, (cell: any) => {

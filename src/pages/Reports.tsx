@@ -28,7 +28,7 @@ import { InventoryTransaction } from '../types';
 import { renderOption } from '../utils/emoji';
 
 
-type ReportType = 'inventory' | 'low_stock' | 'expiry_warning' | 'transactions' | 'category_summary' | 'opening_stock';
+type ReportType = 'inventory' | 'low_stock' | 'expiry_warning' | 'transactions' | 'category_summary' | 'opening_stock' | 'generator_log';
 
 export default function Reports() {
   const { selectedStorehouse } = useStorehouse();
@@ -70,6 +70,7 @@ export default function Reports() {
   const [reportType, setReportType] = useState<ReportType>('inventory');
   const [materials, setMaterials] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<InventoryTransaction[]>([]);
+  const [generatorLogs, setGeneratorLogs] = useState<any[]>([]);
   const [settings, setSettings] = useState(dataService.getSettings());
 
   // Filters State
@@ -135,6 +136,7 @@ export default function Reports() {
   const loadData = () => {
     setMaterials(dataService.getMaterials());
     setTransactions(dataService.getTransactions());
+    setGeneratorLogs(dataService.getGeneratorLogs());
     setSettings(dataService.getSettings());
   };
 
@@ -275,6 +277,15 @@ export default function Reports() {
       }
 
 
+      case 'generator_log': {
+        return generatorLogs.filter(item => {
+          if (dateFrom && item.date < dateFrom) return false;
+          if (dateTo && item.date > dateTo) return false;
+          if (partnerFilter !== 'all' && item.createdBy !== partnerFilter) return false;
+          return true;
+        });
+      }
+
       default:
         return [];
     }
@@ -291,6 +302,8 @@ export default function Reports() {
       return (b.id || '').localeCompare(a.id || '');
     } else if (reportType === 'category_summary') {
       return (a.category || '').localeCompare(b.category || '');
+    } else if (reportType === 'generator_log') {
+      return (b.date || '').localeCompare(a.date || '');
     } else {
       const codeA = a.code || '';
       const codeB = b.code || '';
@@ -327,6 +340,9 @@ export default function Reports() {
       } else if (reportType === 'opening_stock') {
         filename = `سند_توثيق_الأرصدة_الافتتاحية_${stampStr}.xlsx`;
         titleHeader = 'سند توثيق الأرصدة الافتتاحية للمخزون التأسيسي';
+      } else if (reportType === 'generator_log') {
+        filename = `تقرير_سجل_تشغيل_المولد_${stampStr}.xlsx`;
+        titleHeader = 'سجل قراءات وساعات تشغيل عداد المولد';
       }
 
       let headers: string[] = [];
@@ -413,6 +429,17 @@ export default function Reports() {
             row.notes || '-'
           ];
         });
+      } else if (reportType === 'generator_log') {
+        headers = ['التاريخ', 'اليوم', 'القراءة السابقة', 'القراءة الحالية', 'ساعات التشغيل', 'الملاحظات', 'المُدخل'];
+        rows = currentReportData.map((g: any) => [
+          g.date || '',
+          g.dayName || '',
+          Number(g.previousReading) || 0,
+          Number(g.currentReading) || 0,
+          Number(g.operatingHours) || 0,
+          g.notes || '-',
+          g.createdBy || ''
+        ]);
       }
 
       // Initialize Workbook & sheet with proper RTL view options
@@ -632,6 +659,9 @@ export default function Reports() {
       } else if (reportType === 'opening_stock') {
         filename = `سند_توثيق_الأرصدة_الافتتاحية_${stampStr}.pdf`;
         titleHeader = 'سند توثيق الأرصدة الافتتاحية للمخزون التأسيسي';
+      } else if (reportType === 'generator_log') {
+        filename = `تقرير_سجل_تشغيل_المولد_${stampStr}.pdf`;
+        titleHeader = 'سجل قراءات وساعات تشغيل عداد المولد';
       }
 
       // Build Table Data
@@ -954,6 +984,7 @@ export default function Reports() {
               <MenuItem value="transactions">{renderOption("سجل حركات المستودع التفصيلي", "category")}</MenuItem>
               <MenuItem value="category_summary">{renderOption("تقرير الموازنة والملخص الشامل", "category")}</MenuItem>
               <MenuItem value="opening_stock">{renderOption("سند توثيق الأرصدة الافتتاحية", "category")}</MenuItem>
+              <MenuItem value="generator_log">{renderOption("سجل تشغيل ومتابعة عداد المولد", "category")}</MenuItem>
             </TextField>
           </Grid>
 
@@ -971,6 +1002,7 @@ export default function Reports() {
                 {reportType === 'transactions' && 'يسحب حركات التوريد، الصرف، الاستهلاك، والتحويل المرتبطة بالأصناف والمصروفات بالتواريخ دقيقة الثانية.'}
                 {reportType === 'category_summary' && 'يعرض تقريراً ملخصاً وإحصائياً يوضح توزيع وحالة المخزون الكلي لكل تصنيف داخل مستودعات التوزيع.'}
                 {reportType === 'opening_stock' && 'وثيقة رسمية ومستند معتمد لحصر وتثبيت الأرصدة والكميات الافتتاحية المدخلة كبداية تشغيل النظام لبدء رصد المعاملات.'}
+                {reportType === 'generator_log' && 'مخصص لمتابعة قراءات وساعات تشغيل المولد التراكمية وتأثير الحسابات الزمنيّة بمرونة الفلترة كاملة.'}
               </Typography>
             </Box>
           </Grid>
@@ -1449,6 +1481,7 @@ export default function Reports() {
             {reportType === 'transactions' && 'مسودة حركة القيد المخزني لورود وصرف الأصناف'}
             {reportType === 'category_summary' && 'تقرير ملخص مصفوفة التوزيع والأرصدة التراكمية الإجمالية'}
             {reportType === 'opening_stock' && 'سند توثيق وإقرار الأرصدة الافتتاحية للمخزون التأسيسي'}
+            {reportType === 'generator_log' && 'سجل قراءات وساعات تشغيل عداد المولد'}
           </Typography>
           <Typography variant="body2" sx={{ color: '#334155', mt: 1.5, maxWidth: '700px', mx: 'auto', lineHeight: 1.6, fontSize: '13px', fontFamily: '"Cairo", sans-serif' }}>
             {reportType === 'inventory' && 'يوضح هذا السجل كميات الأصناف والمواد المطابقة كلياً للجرد الميداني والموزعة جغرافيًا حسب أماكن التخزين والصيانة الحالية.'}
@@ -1457,6 +1490,7 @@ export default function Reports() {
             {reportType === 'transactions' && 'حصر توثيقي للعمليات الوردية والصرف اليومي الميداني للبلديات والمتعهدين مع بيان الرصيد اللوجستي بعد كل تلقيم تلقائي.'}
             {reportType === 'category_summary' && 'تحليل تراكمي إجمالي لحجم تداول الأصناف حسب الفئة الرئيسية ومستودع الحفظ لتقديم أرقام موازنة فورية لصناع القرار.'}
             {reportType === 'opening_stock' && 'مستند إقرار وحصر لكافة المواد والكميات الافتتاحية المتوفرة مسبقاً بالمخازن كبداية تشغيل للنظام، يتم التوقيع عليه لبدء رصد المعاملات.'}
+            {reportType === 'generator_log' && 'مستند رسمي يوضح الترتيب الزمني لقراءات العداد السابقة والحالية وساعات التشغيل اليومية التراكمية مع الفلترة والتحليل.'}
           </Typography>
           
           {/* Active search filter statement indicators */}
@@ -1625,6 +1659,18 @@ export default function Reports() {
                   <TableCell align="center" sx={{ fontWeight: '900', color: '#1e293b', fontFamily: '"Cairo", sans-serif', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>ملاحظات ومواصفات فنية</TableCell>
                 </TableRow>
               )}
+
+              {reportType === 'generator_log' && (
+                <TableRow>
+                  <TableCell align="center" sx={{ fontWeight: '900', color: '#1e293b', fontFamily: '"Cairo", sans-serif', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>التاريخ</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: '900', color: '#1e293b', fontFamily: '"Cairo", sans-serif', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>اليوم</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: '900', color: '#1e293b', fontFamily: '"Cairo", sans-serif', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>القراءة السابقة</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: '900', color: '#1e293b', fontFamily: '"Cairo", sans-serif', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>القراءة الحالية</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: '900', color: '#0284c7', fontFamily: '"Cairo", sans-serif', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>ساعات التشغيل</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: '900', color: '#1e293b', fontFamily: '"Cairo", sans-serif', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>الملاحظات</TableCell>
+                  <TableCell align="center" sx={{ fontWeight: '900', color: '#1e293b', fontFamily: '"Cairo", sans-serif', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>المُدخل</TableCell>
+                </TableRow>
+              )}
             </TableHead>
             <TableBody>
               {paginatedData.length > 0 ? (
@@ -1790,6 +1836,20 @@ export default function Reports() {
                         <TableCell align="center" sx={{ py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{getDisplayStorageLocation(row)}</TableCell>
                         <TableCell align="center" sx={{ py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{dateFormatted}</TableCell>
                         <TableCell align="center" sx={{ py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{row.notes || '--'}</TableCell>
+                      </TableRow>
+                    );
+                  }
+
+                  if (reportType === 'generator_log') {
+                    return (
+                      <TableRow key={`${row.id}-${idx}`} sx={{ '&:nth-of-type(even)': { bgcolor: '#f8fafc' }, '&:hover': { bgcolor: '#f1f5f9' }, transition: 'background-color 0.15s ease' }}>
+                        <TableCell align="center" sx={{ fontWeight: 'bold', color: '#0284c7', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{row.date}</TableCell>
+                        <TableCell align="center" sx={{ py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{row.dayName}</TableCell>
+                        <TableCell align="center" sx={{ py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{row.previousReading}</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: 'bold', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{row.currentReading}</TableCell>
+                        <TableCell align="center" sx={{ fontWeight: '900', color: '#059669', py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{row.operatingHours} ساعة</TableCell>
+                        <TableCell align="center" sx={{ py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{row.notes || '-'}</TableCell>
+                        <TableCell align="center" sx={{ py: cellPadding.py, px: cellPadding.px, fontSize: fontSizeStyle }}>{row.createdBy}</TableCell>
                       </TableRow>
                     );
                   }

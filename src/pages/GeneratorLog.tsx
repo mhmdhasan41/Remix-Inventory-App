@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Typography, Container, Grid, Paper, Box, Button, Table, TableBody, TableCell, TableRow, TableHead,
+  Typography, Container, Paper, Box, Button, Table, TableBody, TableCell, TableRow, TableHead,
   TableContainer, Chip, Alert, TextField, Dialog, DialogTitle, DialogContent, DialogActions,
-  IconButton, Tooltip
+  IconButton, Tooltip, Snackbar, Collapse, LockIcon as MuiLockIcon
 } from '@mui/material';
 import { 
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, 
@@ -21,15 +21,18 @@ import PrintIcon from '@mui/icons-material/Print';
 import SpeedIcon from '@mui/icons-material/Speed';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
 import FunctionsIcon from '@mui/icons-material/Functions';
 import HistoryToggleOffIcon from '@mui/icons-material/HistoryToggleOff';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import LockIcon from '@mui/icons-material/Lock';
 
 import { dataService } from '../services/dataService';
-import { GeneratorLogEntry } from '../types';
+import { GeneratorLogEntry, GeneratorLogSimulationResult } from '../types';
 import { exportToExcel } from '../utils/exportExcel';
 import { printHtml } from '../utils/printHtml';
 
@@ -56,13 +59,29 @@ export default function GeneratorLog() {
   // Form State
   const [formDate, setFormDate] = useState('');
   const [formCurrentReading, setFormCurrentReading] = useState<string>('');
-  const [formPreviousReading, setFormPreviousReading] = useState<number>(0);
+  const [formPreviousReading, setFormPreviousReading] = useState<string>('0');
   const [formNotes, setFormNotes] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Future Date Warning Dialog
+  const [futureDateWarningOpen, setFutureDateWarningOpen] = useState(false);
+
+  // Simulation & Impact Review Dialog State
+  const [simulationResult, setSimulationResult] = useState<GeneratorLogSimulationResult | null>(null);
+  const [impactDialogOpen, setImpactDialogOpen] = useState(false);
+  const [showImpactDetails, setShowImpactDetails] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   // Delete Confirmation Dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Snackbar Toast Notifications
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
 
   const loadData = () => {
     setLogs(dataService.getGeneratorLogs());
@@ -74,7 +93,7 @@ export default function GeneratorLog() {
     return dataService.subscribe(loadData);
   }, []);
 
-  // Compute stats across all logs
+  // 8 Stats Cards (Yearly stats card removed)
   const stats = useMemo(() => {
     const sortedLogs = [...logs].sort((a, b) => a.date.localeCompare(b.date));
     const count = sortedLogs.length;
@@ -83,14 +102,9 @@ export default function GeneratorLog() {
 
     const now = new Date();
     const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const currentYearStr = `${now.getFullYear()}`;
 
     const monthHours = sortedLogs
       .filter((item) => item.date.startsWith(currentMonthStr))
-      .reduce((sum, item) => sum + item.operatingHours, 0);
-
-    const yearHours = sortedLogs
-      .filter((item) => item.date.startsWith(currentYearStr))
       .reduce((sum, item) => sum + item.operatingHours, 0);
 
     const lastLog = sortedLogs.length > 0 ? sortedLogs[sortedLogs.length - 1] : null;
@@ -110,7 +124,6 @@ export default function GeneratorLog() {
     return {
       totalHours: Number(totalHours.toFixed(2)),
       monthHours: Number(monthHours.toFixed(2)),
-      yearHours: Number(yearHours.toFixed(2)),
       lastRunHours,
       maxHoursLast30Days,
       maxHoursAllTime,
@@ -179,7 +192,7 @@ export default function GeneratorLog() {
     const prevReading = latest ? latest.currentReading : 0;
 
     setFormDate(todayStr);
-    setFormPreviousReading(prevReading);
+    setFormPreviousReading(String(prevReading));
     setFormCurrentReading('');
     setFormNotes('');
     setFormError(null);
@@ -191,7 +204,7 @@ export default function GeneratorLog() {
   // Handle open edit modal
   const handleOpenEdit = (entry: GeneratorLogEntry) => {
     setFormDate(entry.date);
-    setFormPreviousReading(entry.previousReading);
+    setFormPreviousReading(String(entry.previousReading));
     setFormCurrentReading(String(entry.currentReading));
     setFormNotes(entry.notes || '');
     setFormError(null);
@@ -203,7 +216,7 @@ export default function GeneratorLog() {
   // Handle open view modal
   const handleOpenView = (entry: GeneratorLogEntry) => {
     setFormDate(entry.date);
-    setFormPreviousReading(entry.previousReading);
+    setFormPreviousReading(String(entry.previousReading));
     setFormCurrentReading(String(entry.currentReading));
     setFormNotes(entry.notes || '');
     setFormError(null);
@@ -215,8 +228,9 @@ export default function GeneratorLog() {
   // Calculate current operating hours in form
   const computedOperatingHours = useMemo(() => {
     const cur = parseFloat(formCurrentReading);
-    if (isNaN(cur)) return 0;
-    const diff = cur - formPreviousReading;
+    const prev = parseFloat(formPreviousReading);
+    if (isNaN(cur) || isNaN(prev)) return 0;
+    const diff = cur - prev;
     return diff > 0 ? Number(diff.toFixed(2)) : 0;
   }, [formCurrentReading, formPreviousReading]);
 
@@ -224,22 +238,22 @@ export default function GeneratorLog() {
   const handleDateChange = (newDate: string) => {
     setFormDate(newDate);
     setFormError(null);
-    // Find the latest reading prior to or on this date if adding
-    if (dialogMode === 'add') {
+    // Automatic previous reading determination for existing log chain
+    if (dialogMode === 'add' && logs.length > 0) {
       const sortedBefore = logs
         .filter((l) => l.date < newDate)
         .sort((a, b) => a.date.localeCompare(b.date));
       if (sortedBefore.length > 0) {
-        setFormPreviousReading(sortedBefore[sortedBefore.length - 1].currentReading);
+        setFormPreviousReading(String(sortedBefore[sortedBefore.length - 1].currentReading));
       } else {
         const latest = dataService.getLatestGeneratorLog();
-        setFormPreviousReading(latest ? latest.currentReading : 0);
+        setFormPreviousReading(String(latest ? latest.currentReading : 0));
       }
     }
   };
 
-  // Handle Save
-  const handleSave = () => {
+  // Process Save logic with simulation
+  const initiateSave = (ignoreFutureCheck = false) => {
     setFormError(null);
     if (!formDate) {
       setFormError('يرجى اختيار التاريخ بشكل صحيح.');
@@ -247,105 +261,165 @@ export default function GeneratorLog() {
     }
 
     const cur = parseFloat(formCurrentReading);
+    const prev = parseFloat(formPreviousReading);
     if (isNaN(cur)) {
       setFormError('يرجى إدخال القراءة الحالية بشكل صحيح.');
       return;
     }
+    if (isNaN(prev)) {
+      setFormError('يرجى إدخال القراءة السابقة بشكل صحيح.');
+      return;
+    }
 
-    if (cur < formPreviousReading) {
-      setFormError(`القراءة الحالية (${cur}) أقل من القراءة السابقة (${formPreviousReading}). يمنع الحفظ في هذه الحالة.`);
+    // Future date check
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (formDate > todayStr && !ignoreFutureCheck) {
+      setFutureDateWarningOpen(true);
       return;
     }
 
     try {
-      dataService.saveGeneratorLog({
+      // Simulate changes
+      const sim = dataService.simulateSaveGeneratorLog({
         id: editingId || undefined,
         date: formDate,
         dayName: getArabicDayName(formDate),
-        previousReading: formPreviousReading,
+        previousReading: prev,
         currentReading: cur,
         notes: formNotes.trim(),
       });
-      setDialogOpen(false);
+
+      if (sim.affectedCount > 1 || sim.actionType === 'add_old' || sim.actionType === 'edit_old') {
+        setSimulationResult(sim);
+        setShowImpactDetails(sim.affectedCount <= 5);
+        setImpactDialogOpen(true);
+      } else {
+        // Direct commit if single current entry
+        dataService.commitGeneratorLogs(
+          sim.proposedLogs,
+          `تم تسجبل/تحديث قراءة المولد بتاريخ ${formDate} (${cur})`
+        );
+        setDialogOpen(false);
+        setSnackbar({ open: true, message: 'تم حفظ السجل بنجاح', severity: 'success' });
+      }
     } catch (err: any) {
       if (err.message === 'DUPLICATE_DATE_EXISTS') {
         setFormError(`يوجد سجل آخر محفوظ مسبقاً بنفس هذا التاريخ (${formDate}). يُسمح بسجل واحد فقط لكل يوم.`);
-      } else if (err.message === 'CURRENT_READING_LESS_THAN_PREVIOUS') {
-        setFormError(`القراءة الحالية أقل من القراءة السابقة. لا يمكن إتمام الحفظ.`);
+      } else if (err.message && err.message.startsWith('INVALID_SEQUENCE')) {
+        const parts = err.message.split(':');
+        setFormError(`خطأ في تسلسل العداد: القراءة الحالية (${parts[2] || cur}) أقل من القراءة السابقة (${parts[3] || prev}) بتاريخ ${parts[1] || formDate}. يمنع كسر التسلسل.`);
       } else {
-        setFormError('حدث خطأ أثناء حفظ السجل: ' + err.message);
+        setFormError('حدث خطأ أثناء فحص وتسجيل القراءة: ' + err.message);
       }
     }
   };
 
-  // Handle Delete
-  const handleConfirmDelete = () => {
-    if (deletingId) {
-      dataService.deleteGeneratorLog(deletingId);
-      setDeletingId(null);
+  // Commit Simulated Save
+  const handleConfirmSimulationCommit = () => {
+    if (simulationResult) {
+      dataService.commitGeneratorLogs(
+        simulationResult.proposedLogs,
+        `اعتماد التعديل والمحاكاة لـ ${simulationResult.affectedCount} سجل متأثر`
+      );
+      setImpactDialogOpen(false);
+      setSimulationResult(null);
+      setDialogOpen(false);
+      setPendingDeleteId(null);
+      setSnackbar({ open: true, message: 'تمت مراجعة واعتماد الحسابات والتسلسل الزمني بنجاح', severity: 'success' });
+    }
+  };
+
+  // Process Delete with simulation
+  const initiateDelete = (id: string) => {
+    try {
+      const sim = dataService.simulateDeleteGeneratorLog(id);
+      setPendingDeleteId(id);
       setDeleteDialogOpen(false);
+
+      if (sim.affectedCount > 1) {
+        setSimulationResult(sim);
+        setShowImpactDetails(sim.affectedCount <= 5);
+        setImpactDialogOpen(true);
+      } else {
+        dataService.deleteGeneratorLog(id);
+        setSnackbar({ open: true, message: 'تم حذف السجل بنجاح', severity: 'success' });
+      }
+    } catch (err: any) {
+      setSnackbar({ open: true, message: 'تعذر محاكاة حذف السجل: ' + err.message, severity: 'error' });
     }
   };
 
   // Handle Excel Export
   const handleExportExcel = () => {
-    const headers = ['التاريخ', 'اليوم', 'القراءة السابقة', 'القراءة الحالية', 'ساعات التشغيل', 'الملاحظات', 'المُدخل'];
-    const rows = filteredLogs.map((item) => [
-      item.date,
-      item.dayName,
-      String(item.previousReading),
-      String(item.currentReading),
-      String(item.operatingHours),
-      item.notes || '-',
-      item.createdBy,
-    ]);
+    try {
+      const headers = ['التاريخ', 'اليوم', 'القراءة السابقة', 'القراءة الحالية', 'ساعات التشغيل', 'الملاحظات', 'المُدخل'];
+      const rows = filteredLogs.map((item) => [
+        item.date,
+        item.dayName,
+        String(item.previousReading),
+        String(item.currentReading),
+        String(item.operatingHours),
+        item.notes || '-',
+        item.createdBy,
+      ]);
 
-    exportToExcel({
-      title: 'سجل تشغيل ومتابعة عداد المولد',
-      organizationName: settings.organizationName,
-      departmentName: settings.departmentName,
-      filename: `generator_log_${new Date().toISOString().split('T')[0]}.xlsx`,
-      metaFields: [
-        { label: 'عدد السجلات المشمولة:', value: `${filteredLogs.length} سجل` },
-        { label: 'إجمالي ساعات التشغيل المعروضة:', value: `${filteredLogs.reduce((s, i) => s + i.operatingHours, 0).toFixed(2)} ساعة` },
-      ],
-      headers,
-      rows,
-    });
+      exportToExcel({
+        title: 'سجل تشغيل ومتابعة عداد المولد',
+        organizationName: settings.organizationName,
+        departmentName: settings.departmentName,
+        filename: `generator_log_${new Date().toISOString().split('T')[0]}.xlsx`,
+        metaFields: [
+          { label: 'عدد السجلات المشمولة:', value: `${filteredLogs.length} سجل` },
+          { label: 'إجمالي ساعات التشغيل المعروضة:', value: `${filteredLogs.reduce((s, i) => s + i.operatingHours, 0).toFixed(2)} ساعة` },
+        ],
+        headers,
+        rows,
+      });
+
+      setSnackbar({ open: true, message: 'تم إنشاء تقرير Excel بنجاح', severity: 'success' });
+    } catch (err: any) {
+      setSnackbar({ open: true, message: 'فشل تصدير تقرير Excel: ' + err.message, severity: 'error' });
+    }
   };
 
-  // Handle PDF Export
+  // Handle PDF Export / Print
   const handleExportPDF = () => {
-    const headers = ['التاريخ', 'اليوم', 'القراءة السابقة', 'القراءة الحالية', 'ساعات التشغيل', 'الملاحظات', 'المُدخل'];
-    const rows = filteredLogs.map((item) => [
-      item.date,
-      item.dayName,
-      String(item.previousReading),
-      String(item.currentReading),
-      String(item.operatingHours),
-      item.notes || '-',
-      item.createdBy,
-    ]);
+    try {
+      const headers = ['التاريخ', 'اليوم', 'القراءة السابقة', 'القراءة الحالية', 'ساعات التشغيل', 'الملاحظات', 'المُدخل'];
+      const rows = filteredLogs.map((item) => [
+        item.date,
+        item.dayName,
+        String(item.previousReading),
+        String(item.currentReading),
+        String(item.operatingHours),
+        item.notes || '-',
+        item.createdBy,
+      ]);
 
-    printHtml({
-      title: 'سجل قراءات وساعات تشغيل المولد',
-      organizationName: settings.organizationName,
-      departmentName: settings.departmentName,
-      metaFields: [
-        { label: 'تاريخ التقرير:', value: new Date().toLocaleDateString('ar-EG') },
-        { label: 'إجمالي ساعات التشغيل التراكمية:', value: `${stats.totalHours} ساعة` },
-        { label: 'عدد السجلات المشمولة:', value: `${filteredLogs.length} سجل` },
-        { label: 'آخر قراءة مسجلة:', value: `${stats.lastRecordedReading}` },
-      ],
-      tables: [
-        {
-          headers,
-          rows,
-          recordIds: filteredLogs.map((item) => item.id),
-          columnAlignments: ['center', 'center', 'center', 'center', 'center', 'right', 'center'],
-        },
-      ],
-    });
+      printHtml({
+        title: 'سجل قراءات وساعات تشغيل المولد',
+        organizationName: settings.organizationName,
+        departmentName: settings.departmentName,
+        metaFields: [
+          { label: 'تاريخ التقرير:', value: new Date().toLocaleDateString('ar-EG') },
+          { label: 'إجمالي ساعات التشغيل التراكمية:', value: `${stats.totalHours} ساعة` },
+          { label: 'عدد السجلات المشمولة:', value: `${filteredLogs.length} سجل` },
+          { label: 'آخر قراءة مسجلة:', value: `${stats.lastRecordedReading}` },
+        ],
+        tables: [
+          {
+            headers,
+            rows,
+            recordIds: filteredLogs.map((item) => item.id),
+            columnAlignments: ['center', 'center', 'center', 'center', 'center', 'right', 'center'],
+          },
+        ],
+      });
+
+      setSnackbar({ open: true, message: 'تم إعداد تقرير PDF للطباعة بنجاح', severity: 'success' });
+    } catch (err: any) {
+      setSnackbar({ open: true, message: 'فشل إعداد تقرير PDF للطباعة: ' + err.message, severity: 'error' });
+    }
   };
 
   return (
@@ -369,7 +443,7 @@ export default function GeneratorLog() {
                 width: 52,
                 height: 52,
                 borderRadius: 2.5,
-                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                bgcolor: 'rgba(255, 255, 255, 0.25)',
                 backdropFilter: 'blur(8px)',
                 display: 'flex',
                 alignItems: 'center',
@@ -379,11 +453,22 @@ export default function GeneratorLog() {
               <ElectricBoltIcon sx={{ fontSize: 32, color: '#fef08a' }} />
             </Box>
             <Box>
-              <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: 'Cairo, sans-serif', letterSpacing: '-0.02em' }}>
+              <Typography variant="h4" sx={{ fontWeight: 800, fontFamily: 'Cairo, sans-serif', letterSpacing: '-0.02em', color: '#ffffff' }}>
                 سجل تشغيل المولد
               </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.9, fontFamily: 'Cairo, sans-serif', mt: 0.5 }}>
-                متابعة وتوثيق ساعات تشغيل المولد، العداد التراكمي، وتحليلات التشغيل اليومية والشهرية.
+              {/* Enhanced Subtitle Contrast */}
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  fontFamily: 'Cairo, sans-serif', 
+                  mt: 0.5, 
+                  color: '#ffffff',
+                  fontWeight: 700,
+                  textShadow: '0 1px 3px rgba(0, 0, 0, 0.5)',
+                  fontSize: '0.95rem'
+                }}
+              >
+                متابعة وتوثيق ساعات تشغيل المولد، العداد التراكمي وتحليلات التشغيل اليومية والشهرية
               </Typography>
             </Box>
           </Box>
@@ -436,18 +521,18 @@ export default function GeneratorLog() {
                 fontFamily: 'Cairo, sans-serif',
               }}
             >
-              تصدير PDF
+              طباعة PDF
             </Button>
           </Box>
         </Box>
       </Paper>
 
-      {/* Top Section: 9 Stats Cards */}
+      {/* Top Section: Exactly 8 Stats Cards (4 Top, 4 Bottom) */}
       <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, fontFamily: 'Cairo, sans-serif', color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
-        <SpeedIcon color="primary" /> المؤشرات والإحصائيات التراكمية (9 مؤشرات)
+        <SpeedIcon color="primary" /> المؤشرات والإحصائيات التراكمية (8 مؤشرات)
       </Typography>
 
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 2.5, mb: 4 }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2.5, mb: 4 }}>
         {/* Card 1: Total Operating Hours */}
         <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
@@ -474,20 +559,7 @@ export default function GeneratorLog() {
           </Typography>
         </Paper>
 
-        {/* Card 3: Current Year Hours */}
-        <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
-              تشغيل السنة الحالية
-            </Typography>
-            <CalendarTodayIcon sx={{ color: '#7c3aed' }} />
-          </Box>
-          <Typography variant="h5" sx={{ fontWeight: 800, color: '#7c3aed', fontFamily: 'Cairo, sans-serif' }}>
-            {stats.yearHours} <Typography component="span" variant="caption" sx={{ color: 'text.secondary' }}>ساعة</Typography>
-          </Typography>
-        </Paper>
-
-        {/* Card 4: Hours of Last Run */}
+        {/* Card 3: Hours of Last Run */}
         <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
@@ -500,7 +572,7 @@ export default function GeneratorLog() {
           </Typography>
         </Paper>
 
-        {/* Card 5: Max Hours Last 30 Days */}
+        {/* Card 4: Max Hours Last 30 Days */}
         <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
@@ -513,7 +585,7 @@ export default function GeneratorLog() {
           </Typography>
         </Paper>
 
-        {/* Card 6: Max Hours All-Time */}
+        {/* Card 5: Max Hours All-Time */}
         <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
@@ -526,7 +598,7 @@ export default function GeneratorLog() {
           </Typography>
         </Paper>
 
-        {/* Card 7: Average Hours */}
+        {/* Card 6: Average Hours */}
         <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
@@ -539,7 +611,7 @@ export default function GeneratorLog() {
           </Typography>
         </Paper>
 
-        {/* Card 8: Total Records Count */}
+        {/* Card 7: Total Records Count */}
         <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
@@ -552,7 +624,7 @@ export default function GeneratorLog() {
           </Typography>
         </Paper>
 
-        {/* Card 9: Last Recorded Reading */}
+        {/* Card 8: Last Recorded Reading */}
         <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2.5, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
@@ -774,20 +846,43 @@ export default function GeneratorLog() {
               slotProps={{ inputLabel: { shrink: true } }}
             />
 
+            {/* ReadOnly Day Field */}
             <TextField
               fullWidth
               label="اليوم (محسوب تلقائياً)"
               value={getArabicDayName(formDate)}
+              disabled
               slotProps={{ input: { readOnly: true } }}
+              sx={{ bgcolor: 'action.hover' }}
             />
 
+            {/* Previous Reading: Editable ONLY if empty system on add mode, locked otherwise */}
             <TextField
               fullWidth
               type="number"
               label="القراءة السابقة للعداد"
               value={formPreviousReading}
-              helperText="تؤخذ تلقائياً من آخر سجل محفوظ"
-              slotProps={{ input: { readOnly: true } }}
+              disabled={dialogMode === 'view' || (logs.length > 0 && dialogMode === 'add')}
+              onChange={(e) => {
+                setFormPreviousReading(e.target.value);
+                setFormError(null);
+              }}
+              helperText={
+                logs.length === 0 && dialogMode === 'add'
+                  ? 'يمكنك إدخال القراءة السابقة يدوياً لأول سجل في النظام'
+                  : 'محسوبة قفلاً من آخر سجل مسبق'
+              }
+              slotProps={{
+                input: {
+                  readOnly: dialogMode === 'view' || (logs.length > 0 && dialogMode === 'add'),
+                  endAdornment: (logs.length > 0 || dialogMode !== 'add') ? (
+                    <Tooltip title="قيمة محسوبة تلقائياً ومقفلة">
+                      <LockIcon fontSize="small" color="action" />
+                    </Tooltip>
+                  ) : undefined,
+                },
+              }}
+              sx={{ bgcolor: (logs.length > 0 || dialogMode !== 'add') ? 'action.hover' : 'background.paper' }}
             />
 
             <TextField
@@ -841,12 +936,138 @@ export default function GeneratorLog() {
             <Button
               variant="contained"
               color="primary"
-              onClick={handleSave}
+              onClick={() => initiateSave(false)}
               sx={{ fontFamily: 'Cairo, sans-serif', fontWeight: 700, px: 3 }}
             >
               حفظ السجل
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Future Date Warning Dialog */}
+      <Dialog open={futureDateWarningOpen} onClose={() => setFutureDateWarningOpen(false)} dir="rtl" maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ fontFamily: 'Cairo, sans-serif', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1, color: 'warning.main' }}>
+          <WarningAmberIcon color="warning" /> تنبيه: تاريخ مستقبلي
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ fontFamily: 'Cairo, sans-serif', mt: 1 }}>
+            التاريخ المحدد ({formDate}) يقع في المستقبل مقارنة بتاريخ اليوم. هل ترغب بالمتابعة وتأكيد الحفظ؟
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setFutureDateWarningOpen(false)} sx={{ fontFamily: 'Cairo, sans-serif' }}>
+            إلغاء
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => {
+              setFutureDateWarningOpen(false);
+              initiateSave(true);
+            }}
+            sx={{ fontFamily: 'Cairo, sans-serif', fontWeight: 700 }}
+          >
+            متابعة
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Impact Simulation Review Dialog */}
+      <Dialog open={impactDialogOpen} onClose={() => setImpactDialogOpen(false)} maxWidth="md" fullWidth dir="rtl">
+        <DialogTitle sx={{ fontFamily: 'Cairo, sans-serif', fontWeight: 800, bgcolor: 'primary.dark', color: 'white', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <SpeedIcon /> نافذة مراجعة تأثير إعادة الحساب الزمني (Impact Review)
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <Alert severity="info" sx={{ mb: 2.5, fontFamily: 'Cairo, sans-serif' }}>
+            التعديل الذي تود إجرائه يؤثر على التسلسل الزمني للعداد ويستدعي إعادة احتساب السجلات اللاحقة المترتبة زمنياً.
+          </Alert>
+
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2, mb: 3 }}>
+            <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
+                عدد السجلات المتأثرة
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 800, color: 'primary.main', fontFamily: 'Cairo, sans-serif' }}>
+                {simulationResult?.affectedCount || 0} سجل
+              </Typography>
+            </Paper>
+
+            <Paper elevation={0} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
+                تاريخ آخر سجل متأثر
+              </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 800, color: 'secondary.main', fontFamily: 'Cairo, sans-serif' }}>
+                {simulationResult?.lastAffectedRecordDate || formDate}
+              </Typography>
+            </Paper>
+          </Box>
+
+          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, fontFamily: 'Cairo, sans-serif' }}>
+              تفاصيل التغييرات على السلسلة الزمنية
+            </Typography>
+            <Button
+              size="small"
+              endIcon={showImpactDetails ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              onClick={() => setShowImpactDetails(!showImpactDetails)}
+              sx={{ fontFamily: 'Cairo, sans-serif' }}
+            >
+              {showImpactDetails ? 'إخفاء التفاصيل' : 'عرض التفاصيل'}
+            </Button>
+          </Box>
+
+          <Collapse in={showImpactDetails}>
+            <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 280, mb: 2 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700 }}>التاريخ</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>القراءة السابقة (السابقة ➔ الجديدة)</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>القراءة الحالية</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>ساعات التشغيل (السابقة ➔ الجديدة)</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {simulationResult?.impactedItems.map((item) => (
+                    <TableRow key={item.id}>
+                      <TableCell sx={{ fontWeight: 700 }}>{item.date}</TableCell>
+                      <TableCell>
+                        {item.oldPreviousReading} ➔ <strong style={{ color: '#0284c7' }}>{item.newPreviousReading}</strong>
+                      </TableCell>
+                      <TableCell>{item.newCurrentReading}</TableCell>
+                      <TableCell>
+                        {item.oldOperatingHours} س ➔ <strong style={{ color: '#059669' }}>{item.newOperatingHours} س</strong>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Collapse>
+        </DialogContent>
+
+        <DialogActions sx={{ p: 2.5 }}>
+          <Button onClick={() => setImpactDialogOpen(false)} sx={{ fontFamily: 'Cairo, sans-serif' }}>
+            إلغاء
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={() => {
+              if (pendingDeleteId) {
+                dataService.deleteGeneratorLog(pendingDeleteId);
+                setPendingDeleteId(null);
+                setImpactDialogOpen(false);
+                setSnackbar({ open: true, message: 'تم الحذف وإعادة احتساب السجلات بنجاح', severity: 'success' });
+              } else {
+                handleConfirmSimulationCommit();
+              }
+            }}
+            sx={{ fontFamily: 'Cairo, sans-serif', fontWeight: 700, px: 3 }}
+          >
+            متابعة
+          </Button>
         </DialogActions>
       </Dialog>
 
@@ -857,7 +1078,7 @@ export default function GeneratorLog() {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body1" sx={{ fontFamily: 'Cairo, sans-serif' }}>
-            هل أنت تأكد من رغبتك في حذف هذا السجل نهائياً من النظام؟ لا يمكن التراجع عن هذه العملية بعد التأكيد.
+            هل أنت تأكد من رغبتك في حذف هذا السجل نهائياً من النظام؟ سيعيد النظام احتساب السلسلة الزمنية والقراءات للسجلات اللاحقة المترتبة.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
@@ -867,13 +1088,30 @@ export default function GeneratorLog() {
           <Button
             variant="contained"
             color="error"
-            onClick={handleConfirmDelete}
+            onClick={() => deletingId && initiateDelete(deletingId)}
             sx={{ fontFamily: 'Cairo, sans-serif', fontWeight: 700 }}
           >
             حذف السجل
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Snackbar Toast Notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%', fontFamily: 'Cairo, sans-serif', fontWeight: 700 }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }

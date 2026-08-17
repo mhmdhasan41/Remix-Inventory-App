@@ -132,5 +132,26 @@ export interface GeneratorLogEntry {
   createdBy: string;
 }
 
+export interface GeneratorLogImpactItem {
+  id: string;
+  date: string;
+  dayName: string;
+  oldPreviousReading: number;
+  newPreviousReading: number;
+  oldCurrentReading: number;
+  newCurrentReading: number;
+  oldOperatingHours: number;
+  newOperatingHours: number;
+}
+
+export interface GeneratorLogSimulationResult {
+  actionType: 'add_old' | 'edit_old' | 'delete' | 'normal_save';
+  affectedCount: number;
+  lastAffectedRecordDate?: string;
+  impactedItems: GeneratorLogImpactItem[];
+  proposedLogs: GeneratorLogEntry[];
+}
+
+
 
 

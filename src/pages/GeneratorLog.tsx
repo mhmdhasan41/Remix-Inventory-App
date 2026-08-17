@@ -34,7 +34,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import { dataService } from '../services/dataService';
 import { GeneratorLogEntry, GeneratorLogSimulationResult } from '../types';
 import { exportToExcel } from '../utils/exportExcel';
-import { printHtml } from '../utils/printHtml';
+import { exportToPDF, printHtml } from '../utils/printHtml';
 
 const ARABIC_DAYS = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 
@@ -382,24 +382,27 @@ export default function GeneratorLog() {
     }
   };
 
-  // Handle PDF Export / Print
-  const handleExportPDF = () => {
+  // Handle PDF Export
+  const handleExportPDF = async () => {
     try {
+      const stampStr = new Date().toISOString().split('T')[0];
       const headers = ['التاريخ', 'اليوم', 'القراءة السابقة', 'القراءة الحالية', 'ساعات التشغيل', 'الملاحظات', 'المُدخل'];
       const rows = filteredLogs.map((item) => [
         item.date,
         item.dayName,
         String(item.previousReading),
         String(item.currentReading),
-        String(item.operatingHours),
+        `${item.operatingHours} ساعة`,
         item.notes || '-',
         item.createdBy,
       ]);
 
-      printHtml({
+      await exportToPDF({
         title: 'سجل قراءات وساعات تشغيل المولد',
-        organizationName: settings.organizationName,
-        departmentName: settings.departmentName,
+        organizationName: settings.organizationName || 'المستودع البلدي العام',
+        departmentName: settings.departmentName || 'قسم الصيانه والمعاملات',
+        filename: `تقرير_سجل_تشغيل_المولد_${stampStr}.pdf`,
+        orientation: 'portrait',
         metaFields: [
           { label: 'تاريخ التقرير:', value: new Date().toLocaleDateString('ar-EG') },
           { label: 'إجمالي ساعات التشغيل التراكمية:', value: `${stats.totalHours} ساعة` },
@@ -414,11 +417,16 @@ export default function GeneratorLog() {
             columnAlignments: ['center', 'center', 'center', 'center', 'center', 'right', 'center'],
           },
         ],
+        signatures: [
+          { role: settings.storekeeperRole || 'أمين المخزن', name: settings.storekeeperName || '', show: settings.showStorekeeperSignature !== false },
+          { role: settings.systemManagerRole || 'مدير النظام', name: settings.systemManagerName || '', show: settings.showSystemManagerSignature !== false },
+          { role: settings.healthDirectorRole || 'مدير صحة البيئة', name: settings.healthDirectorName || '', show: settings.showHealthDirectorSignature !== false }
+        ]
       });
 
-      setSnackbar({ open: true, message: 'تم إعداد تقرير PDF للطباعة بنجاح', severity: 'success' });
+      setSnackbar({ open: true, message: 'تم تصدير تقرير PDF وتنزيل الملف بنجاح 📄', severity: 'success' });
     } catch (err: any) {
-      setSnackbar({ open: true, message: 'فشل إعداد تقرير PDF للطباعة: ' + err.message, severity: 'error' });
+      setSnackbar({ open: true, message: 'فشل تصدير تقرير PDF: ' + err.message, severity: 'error' });
     }
   };
 

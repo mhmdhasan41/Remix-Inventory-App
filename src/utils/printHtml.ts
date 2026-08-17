@@ -744,6 +744,13 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
         .align-center { text-align: center; }
         .align-left { text-align: left; }
 
+        td span {
+          display: inline-block !important;
+          line-height: 1.2 !important;
+          vertical-align: middle !important;
+          box-sizing: border-box !important;
+        }
+
         /* Notes Block */
         .notes-container {
           margin-top: 20px;
@@ -865,6 +872,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
   // .pdf-page has 30px padding. box-sizing is border-box.
   // The usable height inside .pdf-page is PAGE_HEIGHT - 60.
   const USABLE_HEIGHT = PAGE_HEIGHT - (PAGE_PADDING_PX * 2);
+  const MAX_USABLE_HEIGHT = USABLE_HEIGHT + 1.5; // Subpixel layout tolerance to prevent false page splits
   
   const createNewPage = () => {
     currentPageNum++;
@@ -1005,9 +1013,10 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
       rowData.forEach((cell, cIdx) => {
         const td = idoc.createElement('td');
         td.className = `align-${tableData.columnAlignments?.[cIdx] || 'right'}`;
+        td.style.wordBreak = 'break-word';
         const headerText = tableData.headers[cIdx] ? tableData.headers[cIdx].replace(/<[^>]+>/g, '') : '';
         const noWrapKeywords = ['كود', 'رقم', 'تاريخ', 'وقت', 'كمية', 'رصيد', 'وحدة', 'رمز', 'حالة'];
-        if (noWrapKeywords.some(kw => headerText.includes(kw))) {
+        if (noWrapKeywords.some(kw => headerText.includes(kw)) && headerText.length <= 16) {
           td.style.whiteSpace = 'nowrap';
         }
         td.innerHTML = cell;
@@ -1019,7 +1028,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
       
       let usedHeight = getUsedHeight(pageDiv);
       
-      if (usedHeight > USABLE_HEIGHT) {
+      if (usedHeight > MAX_USABLE_HEIGHT) {
         // Row exceeds current page usable height
         currentTbodyEl!.removeChild(tr);
         totalRenderedRows--;
@@ -1043,7 +1052,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
           totalRenderedRows++;
           
           usedHeight = getUsedHeight(pageDiv);
-          if (usedHeight > USABLE_HEIGHT) {
+          if (usedHeight > MAX_USABLE_HEIGHT) {
             // Row STILL overflows on a fresh page with 0 previous rows!
             // This single row is inherently taller than a full printable A4 page.
             currentTbodyEl!.removeChild(tr);
@@ -1071,7 +1080,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
           totalRenderedRows++;
           
           usedHeight = getUsedHeight(pageDiv);
-          if (usedHeight > USABLE_HEIGHT) {
+          if (usedHeight > MAX_USABLE_HEIGHT) {
             // Single row on fresh page still exceeds USABLE_HEIGHT
             currentTbodyEl!.removeChild(tr);
             totalRenderedRows--;
@@ -1101,7 +1110,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
     notesDiv.innerHTML = `<div class="section-title">ملاحظات</div><div class="notes-text">${data.notes.replace(/\n/g, '<br />')}</div>`;
     pageDiv.appendChild(notesDiv);
     
-    if (getUsedHeight(pageDiv) > USABLE_HEIGHT) {
+    if (getUsedHeight(pageDiv) > MAX_USABLE_HEIGHT) {
       pageDiv.removeChild(notesDiv);
       pageDiv = createNewPage();
       pageDiv.appendChild(notesDiv);
@@ -1132,7 +1141,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
     });
     pageDiv.appendChild(sigsDiv);
     
-    if (getUsedHeight(pageDiv) > USABLE_HEIGHT) {
+    if (getUsedHeight(pageDiv) > MAX_USABLE_HEIGHT) {
       pageDiv.removeChild(sigsDiv);
       pageDiv = createNewPage();
       pageDiv.appendChild(sigsDiv);
@@ -1150,7 +1159,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
     `;
     pageDiv.appendChild(barcodeDiv);
     
-    if (getUsedHeight(pageDiv) > USABLE_HEIGHT) {
+    if (getUsedHeight(pageDiv) > MAX_USABLE_HEIGHT) {
       pageDiv.removeChild(barcodeDiv);
       pageDiv = createNewPage();
       pageDiv.appendChild(barcodeDiv);

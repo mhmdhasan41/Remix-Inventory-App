@@ -808,6 +808,18 @@ export default function Reports() {
             row.notes || ''
           ];
         });
+      } else if (reportType === 'generator_log') {
+        headers = ['التاريخ', 'اليوم', 'القراءة السابقة', 'القراءة الحالية', 'ساعات التشغيل', 'الملاحظات', 'المُدخل'];
+        alignments = ['center', 'center', 'center', 'center', 'center', 'center', 'center'];
+        rows = currentReportData.map((g: any) => [
+          g.date || '',
+          g.dayName || '',
+          String(g.previousReading ?? 0),
+          String(g.currentReading ?? 0),
+          `${g.operatingHours ?? 0} ساعة`,
+          g.notes || '-',
+          g.createdBy || ''
+        ]);
       }
 
 
@@ -845,6 +857,11 @@ export default function Reports() {
           const loc = requireStableStringPart(s.storageLocation, 'storageLocation');
           return JSON.stringify(['category_summary', cat, loc]);
         });
+      } else if (reportType === 'generator_log') {
+        recordIds = currentReportData.map((g: any) => {
+          const id = requireStableStringPart(g.id, 'generatorLogId');
+          return JSON.stringify(['generator_log_report', id]);
+        });
       }
 
       await exportToPDF({
@@ -854,7 +871,7 @@ export default function Reports() {
         filename,
         orientation: reportType === 'transactions' ? 'landscape' : 'portrait',
         metaFields: [
-          { label: 'تصنيف التقرير وعائلته:', value: reportType === 'inventory' ? 'مسرد الجرد الفعلي العام للعهود' : reportType === 'low_stock' ? 'تنبيهات نقص المخزون الحرج' : reportType === 'expiry_warning' ? 'متابعة نفاذ الصلاحية وضمان الجودة' : reportType === 'transactions' ? 'دفتر اليومية وحركات الصرف والتوريد' : reportType === 'opening_stock' ? 'سند توثيق الأرصدة الافتتاحية للمخزون' : 'مصفوفة ملخص الفئات والمستودعات' },
+          { label: 'تصنيف التقرير وعائلته:', value: reportType === 'inventory' ? 'مسرد الجرد الفعلي العام للعهود' : reportType === 'low_stock' ? 'تنبيهات نقص المخزون الحرج' : reportType === 'expiry_warning' ? 'متابعة نفاذ الصلاحية وضمان الجودة' : reportType === 'transactions' ? 'دفتر اليومية وحركات الصرف والتوريد' : reportType === 'opening_stock' ? 'سند توثيق الأرصدة الافتتاحية للمخزون' : reportType === 'generator_log' ? 'سجل متابعة وقراءات عداد المولد' : 'مصفوفة ملخص الفئات والمستودعات' },
           { label: 'تعداد السجلات المدرجة:', value: `${currentReportData.length} سجل حركي دفتري` }
         ],
         tables: [

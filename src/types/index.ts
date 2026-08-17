@@ -119,4 +119,18 @@ export interface SystemUser {
   password?: string;
 }
 
+export interface GeneratorLogEntry {
+  id: string;
+  date: string; // YYYY-MM-DD
+  dayName: string; // Arabic day name
+  previousReading: number;
+  currentReading: number;
+  operatingHours: number; // currentReading - previousReading
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+
 

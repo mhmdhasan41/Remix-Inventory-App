@@ -7,6 +7,7 @@ import {
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import ElectricBoltIcon from '@mui/icons-material/ElectricBolt';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import NotificationsIcon from '@mui/icons-material/Notifications';
@@ -173,9 +174,10 @@ export default function AppLayout({ children }: Props) {
     { text: 'لوحة التحكم', icon: <DashboardIcon />, path: '/', permission: 'dashboard_view', shortcutKey: '1' },
     { text: 'إدارة الأصناف والمخزون', icon: <InventoryIcon />, path: '/materials', permission: 'materials_view', shortcutKey: '2' },
     { text: 'الحركات المخزنية', icon: <ReceiptLongIcon />, path: '/transactions', permission: 'transactions_view', shortcutKey: '3' },
-    { text: 'التقارير الشاملة', icon: <AssessmentIcon />, path: '/reports', permission: 'reports_view', shortcutKey: '4' },
-    { text: 'سجل العمليات', icon: <HistoryIcon />, path: '/audit', permission: 'audit_view', shortcutKey: '5' },
-    { text: 'الإعدادات العامة', icon: <SettingsIcon />, path: '/settings', permission: 'settings_view', shortcutKey: '6' },
+    { text: 'سجل تشغيل المولد', icon: <ElectricBoltIcon />, path: '/generator-log', permission: 'generator_log', shortcutKey: '4' },
+    { text: 'التقارير الشاملة', icon: <AssessmentIcon />, path: '/reports', permission: 'reports_view', shortcutKey: '5' },
+    { text: 'سجل العمليات', icon: <HistoryIcon />, path: '/audit', permission: 'audit_view', shortcutKey: '6' },
+    { text: 'الإعدادات العامة', icon: <SettingsIcon />, path: '/settings', permission: 'settings_view', shortcutKey: '7' },
   ].filter(item => dataService.hasPermission(item.permission));
 
   const routePermissions: Record<string, string> = {
@@ -183,6 +185,7 @@ export default function AppLayout({ children }: Props) {
     '/materials': 'materials_view',
     '/pesticides': 'materials_view',
     '/transactions': 'transactions_view',
+    '/generator-log': 'generator_log',
     '/reports': 'reports_view',
     '/audit': 'audit_view',
     '/settings': 'settings_view'

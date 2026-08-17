@@ -1,4 +1,4 @@
-import { Material, InventoryTransaction, AuditLog, AppSettings, SystemUser } from '../types';
+import { Material, InventoryTransaction, AuditLog, AppSettings, SystemUser, GeneratorLogEntry } from '../types';
 import { db, isFirebaseAvailable, auth } from './firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, getDocs, writeBatch, getDoc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
@@ -67,6 +67,7 @@ const STORAGE_KEYS = {
   AUDIT_LOGS: 'remix_audit_logs_v1',
   SETTINGS: 'remix_settings_v1',
   USERS: 'remix_users_v1',
+  GENERATOR_LOGS: 'remix_generator_logs_v1',
   IS_LOGGED_IN: 'remix_is_logged_in',
   CURRENT_USER: 'remix_current_user_v1',
 };
@@ -121,6 +122,7 @@ const INITIAL_USERS: SystemUser[] = [
       'reports_export',
       'reports_print',
       'audit_view',
+      'generator_log',
       'settings_view',
       'settings_edit',
       'users_manage',
@@ -1409,7 +1411,7 @@ export const dataService = {
     return JSON.parse(data);
   },
 
-  logAudit: (action: string, details: string, itemType?: 'مادة' | 'مبيد' | 'حركة' | 'إعدادات', attachment?: string) => {
+  logAudit: (action: string, details: string, itemType?: 'مادة' | 'مبيد' | 'حركة' | 'إعدادات' | 'مولد', attachment?: string) => {
     const logs = dataService.getAuditLogs();
     const currentUser = dataService.getCurrentUser();
     const newLog: AuditLog = {
@@ -2042,6 +2044,110 @@ export const dataService = {
   isFirebaseOnline: (): boolean => {
     return isFirebaseAvailable && firebaseOnline;
   },
+
+  // GENERATOR LOGS
+  getGeneratorLogs: (): GeneratorLogEntry[] => {
+    const data = localStorage.getItem(STORAGE_KEYS.GENERATOR_LOGS);
+    let logs: GeneratorLogEntry[] = [];
+    if (data) {
+      try {
+        logs = JSON.parse(data);
+      } catch (_) {
+        logs = [];
+      }
+    }
+    return logs.sort((a, b) => a.date.localeCompare(b.date));
+  },
+
+  getLatestGeneratorLog: (): GeneratorLogEntry | undefined => {
+    const logs = dataService.getGeneratorLogs();
+    if (logs.length === 0) return undefined;
+    return logs.reduce((latest, current) => {
+      if (current.date > latest.date) return current;
+      return latest;
+    }, logs[0]);
+  },
+
+  saveGeneratorLog: (entry: Partial<GeneratorLogEntry> & { date: string; currentReading: number; previousReading: number }): GeneratorLogEntry => {
+    const logs = dataService.getGeneratorLogs();
+    const existingIndex = entry.id ? logs.findIndex(l => l.id === entry.id) : -1;
+
+    // Validate duplicate date (if new or changing date)
+    const duplicateDate = logs.find(l => l.date === entry.date && l.id !== entry.id);
+    if (duplicateDate) {
+      throw new Error('DUPLICATE_DATE_EXISTS');
+    }
+
+    if (entry.currentReading < entry.previousReading) {
+      throw new Error('CURRENT_READING_LESS_THAN_PREVIOUS');
+    }
+
+    const now = new Date().toISOString();
+    const operatingHours = Number((entry.currentReading - entry.previousReading).toFixed(2));
+    const currentUser = dataService.getCurrentUser();
+    const createdBy = entry.createdBy || currentUser?.fullName || currentUser?.username || 'مستخدم النظام';
+
+    const getDayName = (dStr: string) => {
+      const days = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+      const dt = new Date(dStr + 'T00:00:00');
+      return days[dt.getDay()] || '';
+    };
+
+    let savedLog: GeneratorLogEntry;
+    if (existingIndex !== -1) {
+      savedLog = {
+        ...logs[existingIndex],
+        ...entry,
+        dayName: entry.dayName || getDayName(entry.date),
+        operatingHours,
+        updatedAt: now,
+      };
+      logs[existingIndex] = savedLog;
+      dataService.logAudit('تعديل سجل المولد', `تم تعديل قراءة سجل المولد لتاريخ: ${savedLog.date} (${savedLog.operatingHours} ساعة)`, 'مولد');
+    } else {
+      savedLog = {
+        id: entry.id || `gen-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        date: entry.date,
+        dayName: entry.dayName || getDayName(entry.date),
+        previousReading: entry.previousReading,
+        currentReading: entry.currentReading,
+        operatingHours,
+        notes: entry.notes || '',
+        createdAt: now,
+        updatedAt: now,
+        createdBy,
+      };
+      logs.push(savedLog);
+      dataService.logAudit('إضافة سجل المولد', `تم تسجيل قراءة المولد لتاريخ: ${savedLog.date} (${savedLog.operatingHours} ساعة)`, 'مولد');
+    }
+
+    localStorage.setItem(STORAGE_KEYS.GENERATOR_LOGS, JSON.stringify(logs));
+
+    const settings = dataService.getSettings();
+    if (isFirebaseAvailable && settings.cloudSyncEnabled) {
+      setDoc(doc(db, 'generator_logs', savedLog.id), cleanUndefined(savedLog))
+        .catch(() => {});
+    }
+    dataService.recordLocalWrite();
+    return savedLog;
+  },
+
+  deleteGeneratorLog: (id: string) => {
+    let logs = dataService.getGeneratorLogs();
+    const target = logs.find(l => l.id === id);
+    if (!target) return;
+
+    logs = logs.filter(l => l.id !== id);
+    localStorage.setItem(STORAGE_KEYS.GENERATOR_LOGS, JSON.stringify(logs));
+
+    dataService.logAudit('حذف سجل المولد', `تم حذف قراءة سجل المولد بتاريخ: ${target.date}`, 'مولد');
+
+    const settings = dataService.getSettings();
+    if (isFirebaseAvailable && settings.cloudSyncEnabled) {
+      deleteDoc(doc(db, 'generator_logs', id)).catch(() => {});
+    }
+    dataService.recordLocalWrite();
+  },
 };
 
 export async function initCloudSync() {
@@ -2152,6 +2258,22 @@ export async function initCloudSync() {
           dataService.notify();
         }
       }, (err) => handleFirestoreError(err, OperationType.LIST, 'users'));
+
+      // 6. Generator Logs listener
+      onSnapshot(collection(db, 'generator_logs'), (snapshot) => {
+        const currentSettings = dataService.getSettings();
+        if (!currentSettings.cloudSyncEnabled) return;
+
+        const list: GeneratorLogEntry[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as GeneratorLogEntry);
+        });
+        list.sort((a, b) => a.date.localeCompare(b.date));
+        if (list.length > 0 || snapshot.metadata.fromCache === false) {
+          localStorage.setItem('remix_generator_logs_v1', JSON.stringify(list));
+          dataService.notify();
+        }
+      }, (err) => handleFirestoreError(err, OperationType.LIST, 'generator_logs'));
     } catch (error) {
 
     }

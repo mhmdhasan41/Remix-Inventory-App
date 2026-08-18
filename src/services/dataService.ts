@@ -1485,16 +1485,28 @@ export const dataService = {
       return { success: false, message: 'هذا المستخدم غير مسجل في النظام' };
     }
 
-    const isDefaultPassword = (found.username === 'admin@system.com' && password === 'admin') || password === '123456';
-    
-    if (found.password) {
-      if (found.password !== password && !isDefaultPassword) {
-        return { success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة!' };
-      }
+    // Determine password validity with precise separation:
+    // - If user has set a custom password → only accept that exact password, no bypass keys
+    // - If user has NO custom password → accept default credentials only (admin/admin or any/123456)
+    const hasCustomPassword = !!found.password;
+
+    let passwordMatches = false;
+    let isUsingDefaultPassword = false;
+
+    if (hasCustomPassword) {
+      // User has already set a personal password — accept only exact match, no override keys
+      passwordMatches = found.password === password;
+      isUsingDefaultPassword = false;
     } else {
-      if (!isDefaultPassword) {
-        return { success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة!' };
-      }
+      // No custom password set yet — accept default credentials only
+      const isAdminDefault = found.username === 'admin@system.com' && password === 'admin';
+      const isGeneralDefault = password === '123456';
+      passwordMatches = isAdminDefault || isGeneralDefault;
+      isUsingDefaultPassword = passwordMatches;
+    }
+
+    if (!passwordMatches) {
+      return { success: false, message: 'اسم المستخدم أو كلمة المرور غير صحيحة!' };
     }
 
     try {
@@ -1506,9 +1518,9 @@ export const dataService = {
       // Continue locally even if Firebase auth fails
     }
 
-    const isUsingDefaultPassword = !found.password || (found.password === password && isDefaultPassword);
-    if (isUsingDefaultPassword && (found.username === 'admin@system.com' && password === 'admin')) {
-      return { success: true, message: 'يرجى تغيير كلمة المرور', requirePasswordChange: true, tempUser: found };
+    // Force password change for ALL users still on default credentials (not just admin)
+    if (isUsingDefaultPassword) {
+      return { success: true, message: 'يرجى تغيير كلمة المرور الافتراضية قبل المتابعة', requirePasswordChange: true, tempUser: found };
     }
 
     if (rememberMe) {
@@ -1703,7 +1715,7 @@ export const dataService = {
     
     // 2. Clear Firestore collections if enabled
     if (isFirebaseAvailable && wasCloudSyncEnabled) {
-      const collections = ['materials', 'transactions', 'audit_logs', 'users', 'settings'];
+      const collections = ['materials', 'transactions', 'audit_logs', 'users', 'settings', 'generator_logs'];
       for (const colName of collections) {
         try {
           const querySnapshot = await getDocs(collection(db, colName));
@@ -1784,6 +1796,7 @@ export const dataService = {
     localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(resetUsers));
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(resetSettings));
     localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify(resetAuditLogs));
+    localStorage.setItem(STORAGE_KEYS.GENERATOR_LOGS, JSON.stringify([]));
     
     // 6. Set flag for Login screen to show reset banner and default admin credentials
     localStorage.setItem('show_reset_credentials', 'true');
@@ -2084,6 +2097,7 @@ export const dataService = {
   recalculateGeneratorChain: (inputLogs: GeneratorLogEntry[]): GeneratorLogEntry[] => {
     const sorted = [...inputLogs].sort((a, b) => a.date.localeCompare(b.date));
     const result: GeneratorLogEntry[] = [];
+    const now = new Date().toISOString();
 
     for (let i = 0; i < sorted.length; i++) {
       const current = { ...sorted[i] };
@@ -2092,8 +2106,15 @@ export const dataService = {
         current.operatingHours = Number((current.currentReading - current.previousReading).toFixed(2));
       } else {
         const prev = result[i - 1];
-        current.previousReading = prev.currentReading;
-        current.operatingHours = Number((current.currentReading - current.previousReading).toFixed(2));
+        // Update previousReading and operatingHours from chain
+        const newPrevReading = prev.currentReading;
+        const newOperatingHours = Number((current.currentReading - newPrevReading).toFixed(2));
+        // Only update updatedAt if values actually changed (chain was affected)
+        if (current.previousReading !== newPrevReading || current.operatingHours !== newOperatingHours) {
+          current.updatedAt = now;
+        }
+        current.previousReading = newPrevReading;
+        current.operatingHours = newOperatingHours;
       }
 
       if (current.currentReading < current.previousReading) {
@@ -2220,8 +2241,21 @@ export const dataService = {
 
     const lastAffected = impactedItems.length > 0 ? impactedItems[impactedItems.length - 1].date : undefined;
 
+    // Determine actionType correctly:
+    // - edit_old: editing a record that has subsequent records (chain will be affected)
+    // - normal_save (edit): editing the last record in chain (no impact on subsequent)
+    // - add_old: adding a record with a date earlier than some existing record
+    // - normal_save: adding a record with the latest date (no cascade needed)
+    let actionType: GeneratorLogSimulationResult['actionType'];
+    if (isEditing) {
+      const hasSubsequent = logs.some((l) => l.id !== entry.id && l.date > entry.date);
+      actionType = hasSubsequent ? 'edit_old' : 'normal_save';
+    } else {
+      actionType = logs.some((l) => l.date > entry.date) ? 'add_old' : 'normal_save';
+    }
+
     return {
-      actionType: isEditing ? 'edit_old' : (logs.some((l) => l.date > entry.date) ? 'add_old' : 'normal_save'),
+      actionType,
       affectedCount: impactedItems.length,
       lastAffectedRecordDate: lastAffected,
       impactedItems,
@@ -2276,7 +2310,7 @@ export const dataService = {
     };
   },
 
-  commitGeneratorLogs: (logs: GeneratorLogEntry[], auditActionMessage?: string) => {
+  commitGeneratorLogs: (logs: GeneratorLogEntry[], auditActionMessage?: string, deletedId?: string) => {
     const sorted = [...logs].sort((a, b) => a.date.localeCompare(b.date));
     localStorage.setItem(STORAGE_KEYS.GENERATOR_LOGS, JSON.stringify(sorted));
 
@@ -2285,6 +2319,10 @@ export const dataService = {
       sorted.forEach((savedLog) => {
         setDoc(doc(db, 'generator_logs', savedLog.id), cleanUndefined(savedLog)).catch(() => {});
       });
+      // Also delete removed record from Firebase if specified
+      if (deletedId) {
+        deleteDoc(doc(db, 'generator_logs', deletedId)).catch(() => {});
+      }
     }
 
     if (auditActionMessage) {

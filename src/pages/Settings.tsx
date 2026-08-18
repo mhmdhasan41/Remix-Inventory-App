@@ -1349,26 +1349,34 @@ export default function Settings() {
   
   // Factory reset trigger
   const handlePerformFactoryReset = async () => {
-    const cleanStr = resetConfirmText.trim().toLowerCase();
-    if (cleanStr !== 'تاكيد' && cleanStr !== 'confirm' && resetConfirmText.trim() !== 'تأكيد' && resetConfirmText.trim() !== 'تاكيد') {
+    const raw = resetConfirmText.trim();
+    const rawLower = raw.toLowerCase();
+    if (rawLower !== 'تاكيد' && rawLower !== 'تأكيد' && rawLower !== 'confirm') {
+      // Keep dialog open so user can correct the input without re-opening
       setErrorMsg('النص المدخل غير صحيح! يرجى كتابة كلمة "تاكيد" بدقة لإتمام إعادة الضبط.');
-      setResetDialogOpen(false);
       return;
     }
 
     if (!resetAdminPassword.trim()) {
+      // Keep dialog open so user can enter password without re-opening
       setErrorMsg('الرجاء إدخال كلمة المرور الحالية الخاصة بك كمدير للتحقق.');
-      setResetDialogOpen(false);
       return;
     }
     
     try {
       setIsFactoryResetting(true);
       
-      // Admin Password Verification layer
+      // Admin Password Verification layer — consistent with login security logic
       const currentUser = dataService.getCurrentUser();
       if (currentUser) {
-        const expected = currentUser.password || (currentUser.username === 'admin@system.com' ? 'admin' : '123456');
+        let expected: string;
+        if (currentUser.password) {
+          // User has set a custom password — verify against it
+          expected = currentUser.password;
+        } else {
+          // User still on default credentials
+          expected = currentUser.username === 'admin@system.com' ? 'admin' : '123456';
+        }
         if (resetAdminPassword !== expected) {
           setIsFactoryResetting(false);
           setErrorMsg('كلمة المرور غير صحيحة! لا يمكن إتمام العملية بدون التحقق من هوية المدير.');
@@ -2199,13 +2207,18 @@ export default function Settings() {
                         color="secondary"
                         fullWidth
                         startIcon={<KeyIcon />}
-                        onClick={() => {
-                          const users = dataService.getUsers();
-                          const idx = users.findIndex(u => u.id === editingUser?.id);
-                          if (idx !== -1) {
-                            users[idx].password = '123456';
-                            localStorage.setItem('remix_users_v1', JSON.stringify(users));
-                            setSuccessMsg('تم إعادة تعيين كلمة المرور إلى الافتراضية: 123456');
+                        onClick={async () => {
+                          const allUsers = dataService.getUsers();
+                          const target = allUsers.find(u => u.id === editingUser?.id);
+                          if (target) {
+                            // Use dataService.saveUser to ensure Firebase sync + Audit Log
+                            const res = await dataService.saveUser({ ...target, password: '123456' });
+                            if (res.success) {
+                              setSuccessMsg('تم إعادة تعيين كلمة المرور إلى الافتراضية (123456) — سيُطلب من المستخدم تغييرها عند أول دخول.');
+                              setUsers(dataService.getUsers());
+                            } else {
+                              setErrorMsg(res.message);
+                            }
                           } else {
                             setErrorMsg('يرجى حفظ المستخدم أولاً قبل إعادة التعيين.');
                           }

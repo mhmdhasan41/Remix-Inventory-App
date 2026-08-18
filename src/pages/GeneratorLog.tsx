@@ -239,15 +239,15 @@ export default function GeneratorLog() {
     setFormDate(newDate);
     setFormError(null);
     // Automatic previous reading determination for existing log chain
-    if (dialogMode === 'add' && logs.length > 0) {
+    if ((dialogMode === 'add' || dialogMode === 'edit') && logs.length > 0) {
       const sortedBefore = logs
-        .filter((l) => l.date < newDate)
+        .filter((l) => l.date < newDate && l.id !== editingId) // exclude self when editing
         .sort((a, b) => a.date.localeCompare(b.date));
       if (sortedBefore.length > 0) {
         setFormPreviousReading(String(sortedBefore[sortedBefore.length - 1].currentReading));
       } else {
-        const latest = dataService.getLatestGeneratorLog();
-        setFormPreviousReading(String(latest ? latest.currentReading : 0));
+        // Inserting before all existing records → previous reading is 0
+        setFormPreviousReading('0');
       }
     }
   };
@@ -297,7 +297,7 @@ export default function GeneratorLog() {
         // Direct commit if single current entry
         dataService.commitGeneratorLogs(
           sim.proposedLogs,
-          `تم تسجبل/تحديث قراءة المولد بتاريخ ${formDate} (${cur})`
+          `تم تسجيل/تحديث قراءة المولد بتاريخ ${formDate} (${cur})`
         );
         setDialogOpen(false);
         setSnackbar({ open: true, message: 'تم حفظ السجل بنجاح', severity: 'success' });
@@ -337,11 +337,18 @@ export default function GeneratorLog() {
       setDeleteDialogOpen(false);
 
       if (sim.affectedCount > 1) {
+        // affectedCount > 1 means the deleted record + at least one subsequent that needs recalc
         setSimulationResult(sim);
         setShowImpactDetails(sim.affectedCount <= 5);
         setImpactDialogOpen(true);
       } else {
-        dataService.deleteGeneratorLog(id);
+        // Only the deleted record itself — commit directly using the proposedLogs
+        dataService.commitGeneratorLogs(
+          sim.proposedLogs,
+          `تم حذف سجل المولد بتاريخ ${dataService.getGeneratorLogs().find((l) => l.id === id)?.date || id}`,
+          id
+        );
+        setPendingDeleteId(null);
         setSnackbar({ open: true, message: 'تم حذف السجل بنجاح', severity: 'success' });
       }
     } catch (err: any) {
@@ -854,44 +861,87 @@ export default function GeneratorLog() {
               slotProps={{ inputLabel: { shrink: true } }}
             />
 
-            {/* ReadOnly Day Field */}
+            {/* ReadOnly Day Field - uses readOnly instead of disabled for better visual */}
             <TextField
               fullWidth
               label="اليوم (محسوب تلقائياً)"
               value={getArabicDayName(formDate)}
-              disabled
-              slotProps={{ input: { readOnly: true } }}
-              sx={{ bgcolor: 'action.hover' }}
-            />
-
-            {/* Previous Reading: Editable ONLY if empty system on add mode, locked otherwise */}
-            <TextField
-              fullWidth
-              type="number"
-              label="القراءة السابقة للعداد"
-              value={formPreviousReading}
-              disabled={dialogMode === 'view' || (logs.length > 0 && dialogMode === 'add')}
-              onChange={(e) => {
-                setFormPreviousReading(e.target.value);
-                setFormError(null);
-              }}
-              helperText={
-                logs.length === 0 && dialogMode === 'add'
-                  ? 'يمكنك إدخال القراءة السابقة يدوياً لأول سجل في النظام'
-                  : 'محسوبة قفلاً من آخر سجل مسبق'
-              }
               slotProps={{
                 input: {
-                  readOnly: dialogMode === 'view' || (logs.length > 0 && dialogMode === 'add'),
-                  endAdornment: (logs.length > 0 || dialogMode !== 'add') ? (
-                    <Tooltip title="قيمة محسوبة تلقائياً ومقفلة">
-                      <LockIcon fontSize="small" color="action" />
+                  readOnly: true,
+                  endAdornment: (
+                    <Tooltip title="يوم الأسبوع محسوب تلقائياً من التاريخ">
+                      <LockIcon fontSize="small" sx={{ color: 'text.disabled', fontSize: '1rem' }} />
                     </Tooltip>
-                  ) : undefined,
+                  ),
+                },
+                inputLabel: { shrink: true },
+              }}
+              sx={{
+                '& .MuiInputBase-root': {
+                  bgcolor: 'action.hover',
+                  cursor: 'default',
+                },
+                '& .MuiInputBase-input': {
+                  color: 'text.secondary',
+                  WebkitTextFillColor: 'unset',
                 },
               }}
-              sx={{ bgcolor: (logs.length > 0 || dialogMode !== 'add') ? 'action.hover' : 'background.paper' }}
             />
+
+            {/* Previous Reading: Editable ONLY for first record in add mode, locked otherwise */}
+            {(() => {
+              const isFirstRecord = logs.length === 0 && dialogMode === 'add';
+              const isLocked = !isFirstRecord;
+              return (
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="القراءة السابقة للعداد"
+                  value={formPreviousReading}
+                  onChange={(e) => {
+                    if (!isLocked) {
+                      setFormPreviousReading(e.target.value);
+                      setFormError(null);
+                    }
+                  }}
+                  helperText={
+                    isFirstRecord
+                      ? 'يمكنك إدخال القراءة السابقة يدوياً لأول سجل في النظام'
+                      : dialogMode === 'edit'
+                      ? 'محسوبة تلقائياً من السجل السابق في السلسلة الزمنية'
+                      : dialogMode === 'view'
+                      ? 'قراءة سابقة محفوظة'
+                      : 'محسوبة تلقائياً ومقفلة من آخر سجل مسبق'
+                  }
+                  slotProps={{
+                    input: {
+                      readOnly: isLocked,
+                      ...(isLocked && {
+                        endAdornment: (
+                          <Tooltip title="قيمة محسوبة تلقائياً ومقفلة">
+                            <LockIcon fontSize="small" sx={{ color: 'text.disabled', fontSize: '1rem' }} />
+                          </Tooltip>
+                        ),
+                      }),
+                    },
+                    inputLabel: { shrink: true },
+                  }}
+                  sx={{
+                    ...(isLocked && {
+                      '& .MuiInputBase-root': {
+                        bgcolor: 'action.hover',
+                        cursor: 'default',
+                      },
+                      '& .MuiInputBase-input': {
+                        color: 'text.secondary',
+                        WebkitTextFillColor: 'unset',
+                      },
+                    }),
+                  }}
+                />
+              );
+            })()}
 
             <TextField
               fullWidth
@@ -1063,8 +1113,13 @@ export default function GeneratorLog() {
             variant="contained"
             color="primary"
             onClick={() => {
-              if (pendingDeleteId) {
-                dataService.deleteGeneratorLog(pendingDeleteId);
+              if (pendingDeleteId && simulationResult) {
+                // Commit using pre-computed proposedLogs (no double simulation)
+                dataService.commitGeneratorLogs(
+                  simulationResult.proposedLogs,
+                  `تم حذف سجل المولد وإعادة احتساب ${simulationResult.affectedCount - 1} سجل متأثر`,
+                  pendingDeleteId
+                );
                 setPendingDeleteId(null);
                 setImpactDialogOpen(false);
                 setSnackbar({ open: true, message: 'تم الحذف وإعادة احتساب السجلات بنجاح', severity: 'success' });

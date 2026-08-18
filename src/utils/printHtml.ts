@@ -483,7 +483,7 @@ const DEFAULT_PAGE_WIDTH_PORTRAIT = 820;
 const DEFAULT_PAGE_HEIGHT_PORTRAIT = 1195;
 const DEFAULT_PAGE_WIDTH_LANDSCAPE = 1120;
 const DEFAULT_PAGE_HEIGHT_LANDSCAPE = 768;
-const PAGE_PADDING_PX = 30;
+const PAGE_PADDING_PX = 25;
 const IFRAME_REMOVE_TIMEOUT_MS = 30000;
 const FONT_LOAD_WAIT_SHORT_MS = 100;
 const FONT_LOAD_WAIT_LONG_MS = 300;
@@ -572,7 +572,7 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
         .pdf-page {
           width: ${PAGE_WIDTH}px;
           height: ${PAGE_HEIGHT}px;
-          padding: 30px;
+          padding: 25px;
           box-sizing: border-box;
           background-color: #ffffff;
           display: flex;
@@ -940,7 +940,12 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
     const lastChild = children[children.length - 1] as HTMLElement;
     const containerRect = container.getBoundingClientRect();
     const lastChildRect = lastChild.getBoundingClientRect();
-    return lastChildRect.bottom - containerRect.top - 30; // 30 is top padding
+    let marginBottom = 0;
+    if (idoc && idoc.defaultView) {
+      const style = idoc.defaultView.getComputedStyle(lastChild);
+      marginBottom = parseFloat(style.marginBottom) || 0;
+    }
+    return lastChildRect.bottom + marginBottom - containerRect.top - PAGE_PADDING_PX;
   };
 
   let pageDiv = createNewPage();
@@ -1207,11 +1212,42 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
     p.style.visibility = 'visible';
   });
 
+  // 7.5. Ledger Auto-fill (تسطير السند): Fill remaining empty space with ruled rows
+  allPages.forEach(p => {
+    const tbodies = Array.from(p.querySelectorAll('.table-container tbody')) as HTMLTableSectionElement[];
+    if (tbodies.length > 0) {
+      const lastTbody = tbodies[tbodies.length - 1];
+      const colsCount = lastTbody.rows.length > 0 ? lastTbody.rows[0].cells.length : 0;
+      if (colsCount > 0) {
+        let currentHeight = getUsedHeight(p);
+        const approxRowHeight = 33; 
+        
+        while (currentHeight + approxRowHeight <= USABLE_HEIGHT + 2) {
+          const tr = idoc.createElement('tr');
+          tr.className = 'empty-ledger-row';
+          for (let c = 0; c < colsCount; c++) {
+            const td = idoc.createElement('td');
+            td.innerHTML = '&nbsp;';
+            tr.appendChild(td);
+          }
+          lastTbody.appendChild(tr);
+          
+          const newHeight = getUsedHeight(p);
+          if (newHeight > USABLE_HEIGHT + 1) {
+            lastTbody.removeChild(tr);
+            break;
+          }
+          currentHeight = newHeight;
+        }
+      }
+    }
+  });
+
   // Final DOM scan for record IDs
   
   
   const renderedRecordIds: string[][] = Array.from({ length: sourceRecordIds.length }, () => [] as string[]);
-  const allDataRows = Array.from(idoc.querySelectorAll('.table-container tbody > tr')) as HTMLTableRowElement[];
+  const allDataRows = Array.from(idoc.querySelectorAll('.table-container tbody > tr:not(.empty-ledger-row)')) as HTMLTableRowElement[];
   
   let lastSeenTableIndex = -1;
   allDataRows.forEach((tr, domIdx) => {
@@ -1284,7 +1320,12 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
       if (i > 0) {
         pdf.addPage();
       }
+      
+      // Prevent html2canvas off-screen rendering bugs by hiding inactive pages
+      allPages.forEach(p => { p.style.display = 'none'; });
       const pageEl = allPages[i];
+      pageEl.style.display = 'flex'; // Restore normal display
+
       const canvas = await html2canvas(pageEl, {
         window: iframe.contentWindow as unknown as Window,
         scale: HTML2CANVAS_SCALE,
@@ -1309,6 +1350,9 @@ export async function exportToPDF(data: PrintData & { filename: string; orientat
       const xOffset = margin + (printWidth - finalPrintWidth) / 2;
       pdf.addImage(imgData, 'JPEG', xOffset, margin, finalPrintWidth, finalPrintHeight);
     }
+    
+    // Restore display for all pages (clean up)
+    allPages.forEach(p => { p.style.display = 'flex'; });
 
     pdf.save(data.filename);
 
